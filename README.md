@@ -10,13 +10,15 @@
 
 ## 最新参考实现
 
+2026-10-26本机开发版增加逐脸双项照片检测、短片段复核及可审计训练对照。[本轮大白话报告](docs/AUTONOMOUS_SESSION_2026-10-26.md)说明了真实改善与仍存在的误报、漏报；实验入口为 `reference_run/run_experimental_demo.cmd`。本轮未覆盖v0.1.0发布包，也未把新候选替换为稳定权重。克隆源码不包含本机实验模型。
+
 - [使用教程与源码阅读](reference_run/README.md)：独立的 `reference_run` 目录和 Python 环境。
 - [整脸生成模型与实测结果](reference_run/GENERATION_CURRENT.md)：FLUX + SD3.5 联合训练，照片默认使用此分支。
 - [换脸/面部篡改实验](reference_run/RESULTS.md)：FF++ 官方划分、视频级指标与微调对照，视频默认使用此分支。
 - [生成检测复现步骤](reference_run/GENERATION_README.md)：数据获取、分组、训练、阈值校准与核验。
 - `reference-source.code-workspace`：在 VS Code 中单独查看参考实现源码。
 
-本机已配置好环境和模型时，双击 `reference_run/run_demo.cmd` 打开界面。照片若要查换脸，在顶部切换检测项目。整脸生成检测仍是实验版，不能把库内高分或单张 GPT 个例的结果视为对所有生成器有效。
+本机已配置好环境和模型时，双击 `reference_run/run_demo.cmd` 打开源码界面。当前源码的照片自动模式会逐脸分别检查生成和篡改；视频分别给原整段规则和局部复核结果。v0.1.0发布包保留原行为。不能把库内高分或单张GPT个例视为对所有生成器有效。
 
 **Git 历史仅保存源码、依赖版本和文档；Releases 附件另提供便携运行时和推理模型。** 数据集、开发环境、特征缓存、日志和个人图片不分发。只 clone 源码仍需按教程准备环境与模型；想直接检测请下载上方免安装包。下文保留基础环境与原始数据准备说明。
 

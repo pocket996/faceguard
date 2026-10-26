@@ -1,4 +1,4 @@
-"""Train a separate generation detector; never tune with SD3.5 or the user's GPT image."""
+"""Train a generation detector with validation-only selection and isolated experiment outputs."""
 import argparse
 from collections import Counter, defaultdict
 import csv
@@ -13,7 +13,7 @@ from PIL import Image, ImageFilter
 from sklearn.metrics import roc_auc_score
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from torchvision import transforms
 
 from core import HERE, backbone, digest, image_transform, save_json
@@ -23,8 +23,9 @@ OUT = HERE / 'artifacts/generation'
 
 
 class GenerationImages(Dataset):
-    def __init__(self, rows, augment=False, stress=False):
+    def __init__(self, rows, augment=False, stress=False, strong=False):
         self.rows, self.augment, self.stress = rows, augment, stress
+        self.strong = strong
         self.base = image_transform()
         self.color = transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1)
 
@@ -39,13 +40,13 @@ class GenerationImages(Dataset):
             if random.random() < .5:
                 image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
             image = self.color(image)
-            size = random.choice((96, 112, 128))
+            size = random.choice((64, 80, 96, 112, 128) if self.strong else (96, 112, 128))
             image = image.resize((size, size), Image.Resampling.BILINEAR)
             if random.random() < .25:
-                image = image.filter(ImageFilter.GaussianBlur(random.uniform(.1, .7)))
+                image = image.filter(ImageFilter.GaussianBlur(random.uniform(.1, 1.2 if self.strong else .7)))
         if self.stress or (self.augment and random.random() < .7):
             buffer = io.BytesIO()
-            image.save(buffer, format='JPEG', quality=60 if self.stress else random.randint(55, 98))
+            image.save(buffer, format='JPEG', quality=60 if self.stress else random.randint(40 if self.strong else 55, 98))
             buffer.seek(0)
             with Image.open(buffer) as decoded:
                 image = decoded.convert('RGB')
@@ -63,7 +64,7 @@ def score(network, rows, args, stress=False):
     return np.asarray(output)
 
 
-def audit(rows, allow_sd35_training=False):
+def audit(rows, allow_sd35_training=False, allow_openfake=False):
     groups, hashes = defaultdict(set), defaultdict(set)
     seen = set()
     for row in rows:
@@ -72,8 +73,13 @@ def audit(rows, allow_sd35_training=False):
         seen.add(row['sample_id'])
         if not allow_sd35_training and row['method'] == 'SD35' and row['split'] != 'heldout_generator':
             raise ValueError('Held-out generator leaked into tuning')
-        if row['method'] not in ('real', 'FLUX', 'SD35'):
+        allowed = ('real', 'FLUX', 'SD35', 'gpt-image-1', 'gpt-image-1.5', 'gpt-image-2', 'nano-banana-pro') if allow_openfake else ('real', 'FLUX', 'SD35')
+        if row['method'] not in allowed:
             raise ValueError('Unknown method')
+        if row['label'] != ('0' if row['method']=='real' else '1'):
+            raise ValueError('Method/label mismatch')
+        if row['split'] in ('train','val') and row['method'] in ('gpt-image-1.5','gpt-image-2','nano-banana-pro'):
+            raise ValueError('Locked external generator leaked into tuning')
         groups[row['group']].add(row['split'])
         hashes[row['pixel_sha256']].add(row['split'])
         if not (HERE / row['path']).is_file():
@@ -85,6 +91,18 @@ def audit(rows, allow_sd35_training=False):
             raise ValueError('Missing class in ' + split)
 
 
+def balanced_source_weights(rows):
+    group_counts = Counter((r['label'],r['source']+':'+r['method'],r['group']) for r in rows)
+    source_groups, class_sources = defaultdict(set), defaultdict(set)
+    for row in rows:
+        bucket = row['source'] + ':' + row['method']
+        source_groups[(row['label'], bucket)].add(row['group'])
+        class_sources[row['label']].add(bucket)
+    return np.array([1 / (2 * len(class_sources[row['label']]) *
+        len(source_groups[(row['label'], row['source'] + ':' + row['method'])]) *
+        group_counts[(row['label'],row['source']+':'+row['method'],row['group'])]) for row in rows])
+
+
 def main():
     global OUT
     parser = argparse.ArgumentParser(description=__doc__)
@@ -93,6 +111,13 @@ def main():
     parser.add_argument('--workers', type=int, default=2)
     parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--include-sd35', action='store_true', help='Separate joint experiment; SD3.5 is no longer held out')
+    parser.add_argument('--manifest', type=Path, help='Use an audited experiment manifest instead of the default')
+    parser.add_argument('--output', type=Path, help='Isolated experiment directory; does not activate a model')
+    parser.add_argument('--skip-test', action='store_true', help='Train/validate only; leave test locked for later evaluation')
+    parser.add_argument('--allow-openfake', action='store_true', help='Research-only publisher-labeled GPT1 development; other generators remain locked')
+    parser.add_argument('--source-balanced-selection', action='store_true')
+    parser.add_argument('--strong-augment', action='store_true')
+    parser.add_argument('--balanced-sampling', action='store_true', help='Sample balanced sources/groups instead of amplifying rare-source gradients')
     args = parser.parse_args()
     if min(args.epochs, args.batch_size) < 1 or args.workers < 0:
         parser.error('Invalid training arguments')
@@ -103,13 +128,15 @@ def main():
     torch.set_num_threads(4)
     if args.include_sd35:
         OUT = HERE / 'artifacts/generation/joint'
+    if args.output:
+        OUT = args.output.resolve()
     OUT.mkdir(parents=True, exist_ok=True)
     if args.include_sd35:
         (OUT / 'READY.json').unlink(missing_ok=True)
-    path = HERE / 'data/generation_manifest.csv'
+    path = args.manifest.resolve() if args.manifest else HERE / 'data/generation_manifest.csv'
     with path.open(encoding='utf-8', newline='') as stream:
         rows = list(csv.DictReader(stream))
-    if args.include_sd35:
+    if args.include_sd35 and not args.manifest:
         from prepare_generation import group_split
         for row in rows:
             if row['method'] == 'SD35':
@@ -119,23 +146,15 @@ def main():
             writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
             writer.writeheader()
             writer.writerows(rows)
-    audit(rows, allow_sd35_training=args.include_sd35)
+    audit(rows, allow_sd35_training=args.include_sd35, allow_openfake=args.allow_openfake)
     train_rows = [r.copy() for r in rows if r['split'] == 'train']
     val_rows = [r for r in rows if r['split'] == 'val']
+    validation_weights = balanced_source_weights(val_rows) if args.source_balanced_selection else None
     # Balance labels, real-photo sources, then known identity groups within a source.
-    group_counts = Counter(r['group'] for r in train_rows)
-    source_groups = defaultdict(set)
-    class_sources = defaultdict(set)
-    for row in train_rows:
-        bucket = row['source'] + ':' + row['method']
-        source_groups[(row['label'], bucket)].add(row['group'])
-        class_sources[row['label']].add(bucket)
-    for row in train_rows:
-        row['weight'] = 1 / (2 * len(class_sources[row['label']]) *
-            len(source_groups[(row['label'], row['source'] + ':' + row['method'])]) * group_counts[row['group']])
-    scale = len(train_rows) / sum(r['weight'] for r in train_rows)
-    for row in train_rows:
-        row['weight'] *= scale
+    weights = balanced_source_weights(train_rows)
+    weights *= len(train_rows) / weights.sum()
+    for row,weight in zip(train_rows,weights):
+        row['weight'] = float(weight)
     encoder = backbone()
     imagenet = torch.load(HERE / 'weights/torch/checkpoints/resnet18-f37072fd.pth', map_location='cpu', weights_only=True)
     imagenet.pop('fc.weight')
@@ -151,14 +170,19 @@ def main():
     scaler = torch.amp.GradScaler('cuda', enabled=args.device == 'cuda')
     best_auc, history = -1, []
     for epoch in range(args.epochs):
-        loader = DataLoader(GenerationImages(train_rows, augment=True), batch_size=args.batch_size,
-            shuffle=True, num_workers=args.workers, pin_memory=args.device == 'cuda',
+        sampling_generator = torch.Generator().manual_seed(2026 + epoch)
+        sampler = WeightedRandomSampler([r['weight'] for r in train_rows], len(train_rows), replacement=True,
+                                       generator=sampling_generator) if args.balanced_sampling else None
+        loader = DataLoader(GenerationImages(train_rows, augment=True, strong=args.strong_augment), batch_size=args.batch_size,
+            shuffle=sampler is None, sampler=sampler, num_workers=args.workers, pin_memory=args.device == 'cuda',
             generator=torch.Generator().manual_seed(2026 + epoch))
         network.train()
         count, total_loss = 0, 0.
         for step, (images, labels, weights) in enumerate(loader):
             images = images.to(args.device, non_blocking=True)
             labels, weights = labels.to(args.device, dtype=torch.float32), weights.to(args.device, dtype=torch.float32)
+            if args.balanced_sampling:
+                weights = torch.ones_like(weights)
             optimizer.zero_grad(set_to_none=True)
             with torch.amp.autocast(device_type=args.device, enabled=args.device == 'cuda'):
                 logits = network(images).flatten()
@@ -176,7 +200,7 @@ def main():
         scheduler.step()
         p = score(network, val_rows, args)
         y = [int(r['label']) for r in val_rows]
-        auc = float(roc_auc_score(y, p))
+        auc = float(roc_auc_score(y, p, sample_weight=validation_weights))
         item = dict(epoch=epoch + 1, weighted_train_loss=total_loss / count,
                     validation_auc=auc, seconds=time.monotonic() - start)
         history.append(item)
@@ -184,7 +208,9 @@ def main():
         print('Validation:', json.dumps(item), flush=True)
         if auc > best_auc:
             best_auc = auc
-            threshold = select_threshold(y, p)
+            boundary = select_threshold(y, p, sample_weight=validation_weights)
+            below, above = p[p < boundary], p[p >= boundary]
+            threshold = float((below.max() + above.min())/2) if len(below) and len(above) else boundary
             state = dict(backbone={k: v.cpu().clone() for k, v in encoder.state_dict().items()},
                 head={k: v.cpu().clone() for k, v in head.state_dict().items()},
                 model_name='resnet18_generation', selected_epoch=epoch + 1,
@@ -195,6 +221,14 @@ def main():
                 real_sources=['LFW', 'FFHQ-256 mirror subset'],
                 training_scope='Experimental whole-face generation detector; GPT not represented in training',
                 task='whole_face_generation')
+            state['threshold_strategy'] = 'Midpoint of optimal validation balanced-accuracy interval'
+            state['source_balanced_selection'] = args.source_balanced_selection
+            state['strong_augmentation'] = args.strong_augment
+            state['balanced_sampling'] = args.balanced_sampling
+            if args.allow_openfake:
+                state['training_generators'] = sorted({r['method'] for r in train_rows if r['label']=='1'})
+                state['real_sources'] = sorted({r['source'] for r in train_rows if r['label']=='0'})
+                state['training_scope'] = 'Research-only OpenFake publisher-labeled GPT1 subset + cleaned original sources; no GPT1.5/GPT2/nano-pro used for tuning'
             torch.save(state, OUT / 'model.pt')
     # Lock all choices before touching test or the unseen generator.
     state = torch.load(OUT / 'model.pt', map_location='cpu', weights_only=True)
@@ -202,12 +236,16 @@ def main():
     head.load_state_dict(state['head'])
     threshold = state['frame_threshold']
     report = dict(history=history, selected_epoch=state['selected_epoch'],
-        selection='Epoch by validation AUC; threshold by validation balanced accuracy',
+        selection='Epoch by '+('source/group balanced ' if args.source_balanced_selection else '')+'validation AUC; threshold midpoint in optimal validation balanced-accuracy interval',
         training_generators=state['training_generators'], heldout_generators=[] if args.include_sd35 else ['Stable Diffusion 3.5'],
         user_gpt_image_used_for_training_or_selection=False,
         threshold=threshold, splits={})
+    if args.allow_openfake:
+        report['heldout_generators']=sorted({r['method'] for r in rows if r['split']=='external_test' and r['label']=='1'})
     test_real = [r for r in rows if r['split'] == 'test' and r['label'] == '0']
     for split in ('val', 'test', 'heldout_generator'):
+        if args.skip_test and split != 'val':
+            continue
         selected = [r for r in rows if r['split'] == split]
         if not selected:
             continue

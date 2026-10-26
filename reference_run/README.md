@@ -1,5 +1,7 @@
 # FaceGuard：从现有数据到可运行模型的独立参考实现
 
+**2026-10-26源码开发版**：详见 [本轮结果与不足](../docs/AUTONOMOUS_SESSION_2026-10-26.md)。当前自动模式对检出的每张照片人脸分别运行生成与篡改检查；可以按编号放大查看、取消检测。视频保留原16帧整段规则，另提供按验证数据选阈值的局部复核，不能把更多抽帧当成已解决漏检。`run_experimental_demo.cmd`明确打开本机实验候选，稳定权重不覆盖；克隆源码不含候选权重。下文关于最大脸/16帧平均描述的是原基线和v0.1.0，复现旧结果时使用 `predict.py --video-sampling legacy`。
+
 **新增 AI 整脸生成检测分支**：使用方式与当前联合模型实测结果分别见 [GENERATION_README.md](GENERATION_README.md)、[GENERATION_CURRENT.md](GENERATION_CURRENT.md)。第一版跨生成器实验另存 GENERATION_RESULTS.md。现在默认照片检测整脸生成，视频检测换脸/面部篡改；照片要查换脸时，在界面上方切换「检测项目」。下文记录原 FF++ 第一阶段，数据状态以新增分支报告为准。
 
 **队友直接使用**：推荐下载 [Windows CPU 免安装预览版](https://github.com/pocket996/deepfake-detection/releases/tag/v0.1.0)，解压后双击 FaceGuard.exe。[操作说明](../docs/TEAM_QUICKSTART.md)。
@@ -78,7 +80,7 @@ cd D:\deepfake-detection\reference_run
 
 然后 `finetune.py` 用同一个 ImageNet 骨干重新初始化分类层，训练全部网络参数，使用 AdamW、水平翻转和 CUDA 混合精度。固定运行 4 轮，每轮每段训练视频取 4 张交错帧，四轮合计覆盖所有现有训练帧；这不等于每轮使用全部 16 帧。每轮都在完整验证集评估，按视频 AUC 保存最佳轮次，再确定阈值，最后评估测试集。骨干学习率 1e-4、分类层 3e-4，余弦调度；真假损失按类别数量平衡。
 
-微调模型为 `artifacts/model_finetuned.pt`，其结果文件以 `finetuned_` 开头；演示和命令行默认优先用它。若要比较冻结骨干对照，给 `predict.py` 加 `--checkpoint artifacts/model.pt`。微调也没有使用 FairFaceGen、来源不明数据或外部测试库。
+微调模型为 `artifacts/model_finetuned.pt`，其结果文件以 `finetuned_` 开头；视频和指定篡改任务默认优先用它。若比较冻结骨干对照，给 `predict.py` 加 `--task manipulation --checkpoint artifacts/model.pt`。该历史FF++微调没有使用FairFaceGen、来源不明数据或外部测试库。
 
 官方划分：train 3,600 段、val 700 段、test 700 段，按 500 对来源编号分组。类别是真实 1,000 段、四类篡改各 1,000 段。因此“全部预测为假”也能拿到 80% accuracy；阅读结果时应同时看 AUC、balanced accuracy、混淆矩阵和真实类误报。
 

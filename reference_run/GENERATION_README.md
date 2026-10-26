@@ -20,7 +20,7 @@ cd D:\deepfake-detection\reference_run
 .\.venv\Scripts\python.exe predict.py 'D:\你的视频.mp4'
 ```
 
-`--task auto` 是默认值。显式传 `--checkpoint` 时，旧命令仍按原换脸模型解释；自定义整脸生成权重应同时传 `--task generation`。
+`--task auto` 是默认值；当前源码照片自动模式分别运行生成和篡改。显式传 `--checkpoint` 必须同时指定 `--task generation` 或 `--task manipulation`，避免权重任务混淆。双项实验权重可分别用 `--generation-checkpoint`、`--photo-checkpoint`；详见本轮SESSION说明。
 
 个人回归图片不随仓库公开。如需额外检查自己的样本，使用 `verify_generation.py --experiment joint --user-image 'D:\你的照片.jpg'`。不传 `--user-image` 时跳过个人样本检查，仍可完成其余核验与报告。
 

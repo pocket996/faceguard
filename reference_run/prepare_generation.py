@@ -16,7 +16,8 @@ import numpy as np
 from PIL import Image, ImageOps
 import pyarrow.parquet as pq
 
-from core import HERE, PROJECT, crop_face, digest, save_json
+from project_io import HERE,PROJECT,digest,save_json
+from media_faces import crop_face
 from generation_common import encode_canonical
 
 LOCAL = threading.local()

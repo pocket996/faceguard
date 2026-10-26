@@ -47,8 +47,8 @@ def aggregate(rows, probabilities):
                  score=float(np.mean([p for _, p in v])), frames=len(v)) for k, v in sorted(groups.items())]
 
 
-def select_threshold(y, p):
-    fpr, tpr, thresholds = roc_curve(y, p)
+def select_threshold(y, p, sample_weight=None):
+    fpr, tpr, thresholds = roc_curve(y, p, sample_weight=sample_weight)
     valid = np.isfinite(thresholds) & (thresholds >= 0) & (thresholds <= 1)
     indices = np.flatnonzero(valid)
     return float(thresholds[indices[np.argmax((tpr - fpr)[indices])]])

@@ -5,3 +5,5 @@ weights/
 outputs/
 *.pyc
 tools/download-FaceForensics.py
+scripts/run_morning_*.ps1
+scripts/run_project_python.ps1

@@ -54,7 +54,7 @@ def main():
     for name, task, file, decision in [
         ('generated_photo', 'generation', args.generation_photo, 'suspected_generation'),
         ('real_photo', 'generation', args.real_photo, 'no_generation_detected'),
-        ('manipulated_video', 'manipulation', args.fake_video, 'suspected_manipulation'),
+        ('manipulated_video', 'manipulation', args.fake_video, 'video_results'),
     ]:
         output = folder / (name + '.json')
         run(name, ['--self-test', '--self-test-task', task, '--test-input', file.resolve(),
