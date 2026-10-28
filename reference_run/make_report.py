@@ -148,8 +148,8 @@ AUC 衡量模型将伪造排在真实之前的能力；0.5 接近随机排序。
 
 当前数据足够学习换脸/篡改检测，本机足够，无需先租服务器。若要实现原始设想的全部范围，还需配套真实照片、现代生成器与独立视频测试数据，详细准备项和 1–2 周学习 / 4–8 周扩展计划见 README.md。
 '''
-    (HERE / 'RESULTS.md').write_text(report, encoding='utf-8')
-    print('Wrote RESULTS.md, storage.json and reproducibility.json')
+    (artifact / 'RESULTS.md').write_text(report, encoding='utf-8')
+    print('Wrote artifacts/RESULTS.md, storage.json and reproducibility.json')
 
 
 if __name__ == '__main__':

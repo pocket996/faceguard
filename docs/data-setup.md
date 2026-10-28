@@ -1,53 +1,115 @@
-# 数据准备：AI 人脸生成与篡改检测系统
+# 数据准备与加载
 
-## 项目范围
+现有实验已完成 FF++ c23 的 5,000 段视频整理，得到 79,994 张人脸图片；整脸生成分支也已准备 LFW、FFHQ 镜像与 FairFaceGen 数据。这里保留重建步骤，实际模型效果见 [实验记录](EXPERIMENTS.md)。
 
-检测包含人脸的照片与视频，覆盖整脸生成、换脸及面部篡改。模型尚未实现，当前准备数据。AI-Face 图片与 FF++ 视频分别保存，不把全部内容混成一个真假目录。
+<a id="ffpp"></a>
 
-## 当前状态（2026-10-17）
+## FF++ 下载与预处理
 
-- AI-Face：用户已能在浏览器看到 Real、DMs、GANs、deepfakes 四个文件夹；本地直接请求官方 SharePoint 链接返回 403，尚未取得图片与标注。需从可访问的浏览器启动下载，然后核对包大小、完整性与文件数量。
-- FF++：重新获取已获批的官方 v4 脚本，EU2 试下载五类各一个视频成功。标准 c23 全量下载已完成，共 5000 个视频、9,041,543,739 字节，零失败；状态见 `outputs/ffpp-download-status.json`。已做传输长度、MP4 文件头和 SHA256 收据检查，尚未对全部视频完整解码。
-- FF++ 官方划分已保存：`data/manifests/ffpp-splits/train.json`、`val.json`、`test.json`，分别为 360、70、70 对原始视频编号（对应 720、140、140 个原始序列）。
-- 整段 AI 生成的视频尚未选定独立数据集。AI-Face 的生成图片和 FF++ 的换脸视频不能替代这类测试数据。
-
-## FF++ 下载范围与恢复
-
-范围为 original、Deepfakes、Face2Face、FaceSwap、NeuralTextures 的 c23 视频各 1000 个；不包含 raw/c40、生成器权重、掩码或独立的 Google DeepFakeDetection 数据集。
+先按 [官方说明](https://github.com/ondyari/FaceForensics/blob/master/dataset/README.md) 申请并取得官方脚本，保存到 tools/download-FaceForensics.py；该脚本、凭据和数据不提交 Git。下载范围为 original、Deepfakes、Face2Face、FaceSwap、NeuralTextures 的 c23，各 1,000 段。
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/download_ffpp.py --accept-terms --workers 4
 ```
 
-不要与已运行的下载进程同时执行上述命令。后台 PID 记录于 `outputs/ffpp-download.pid`，日志位于 `outputs/ffpp-download.log` 和 `outputs/ffpp-download-errors.log`。
+仅在没有同类下载任务运行时启动或恢复。下载器校验传输长度、MP4 文件头与 SHA256 收据，不代替完整解码；磁盘低于 20 GiB 时停止。官方 train/val/test 为 360/70/70 对来源编号，对应 3,600/700/700 段视频。
 
-脚本读取获批的 `tools/download-FaceForensics.py` 中的官方目录与 EU2 地址；按官方清单下载，校验响应长度及 MP4 文件头、记录 SHA256 后原子写入正式文件。恢复时校验已有下载收据，未完成的 `.part` 文件会重新下载。网络请求超时后最多重试三次。磁盘剩余不足 20 GiB 时停止写入并记录失败。传输检查不替代视频完整解码检查。
+## 运行方式
 
-官方说明：https://github.com/ondyari/FaceForensics/blob/master/dataset/README.md
+始终在 `D:\faceguard` 的 PowerShell 使用项目虚拟环境。
 
-## AI-Face 下载入口
+1. 重建视频清单：
 
-官方仓库：https://github.com/Purdue-M2/AI-Face-FairnessBench
+```powershell
+.\.venv\Scripts\python.exe scripts/prepare_ffpp_manifest.py
+```
 
-- 图片：https://purdue0-my.sharepoint.com/:f:/g/personal/lin1785_purdue_edu/EoFNIgrp3A5JiIbP5fv9BqABUnbp_BnHKbvpR1xGUTaM7g?e=u5cmIy
-- 标注：https://purdue0-my.sharepoint.com/:f:/g/personal/lin1785_purdue_edu/IgA_6O457sRAR5tmhBnIRTwRARCrVHJ7TC4paxwrBszapfU?e=ZJ82Gx
+2. 重现首批处理：
 
-当前计划下载四类图片及官方标注，在同一数据集下保留 Real、DMs、GANs、deepfakes 的原始目录和生成方法。下载前确认总大小与解压空间，本机剩余空间有限，不能默认全量归档和解压结果均可容纳。若浏览器无法下载，官方联系邮箱为 lin1785@purdue.edu、hu968@purdue.edu。
+```powershell
+.\.venv\Scripts\python.exe scripts/prepare_ffpp_faces.py --pairs-per-split 1 --frames 16 --size 256 --workers 2
+```
 
-AI-Face 的 GAN/扩散模型子集也可能包含编辑任务，需按方法记录任务类别，不能一概标成整脸生成。官方仓库声明数据许可为 CC BY-NC-ND 4.0；遵循数据及来源条款，并在研究报告引用对应论文。不要把数据、访问凭据或 FF++ 获批脚本提交到公开仓库。
+3. 验证首批真实/伪造图片均能组成模型输入批次：
 
-## 数据整理与实验
+```powershell
+.\.venv\Scripts\python.exe scripts/check_data_loader.py data/manifests/ffpp-frames-preview-1-93e2b370610e.csv
+```
 
-已实现官方划分清单生成、均匀抽帧、YuNet 人脸裁剪和统一图片加载器。首批 30 个视频、480 张图的流程验证已通过，全量预处理已启动；实际状态以 `outputs/ffpp-preprocess-full-93e2b370610e.json` 为准，运行方法见 [ffpp-preparation.md](ffpp-preparation.md)。不能在全量任务完成前将首批验证称为全数据处理完成。较新图片数据候选与下载入口见 [image-dataset-options.md](image-dataset-options.md)。
+4. 全量处理或中断后的恢复命令（仅在没有同类处理进程运行时执行）：
 
-保留官方划分，记录数据集、任务类别、生成方法、真实/伪造标签、来源关系和原路径。检查跨数据集重复与身份/源视频重叠，尤其避免 AI-Face 中来自 FF++ 的帧与 FF++ 测试视频相互泄漏。相关视频、抽帧及派生版本须位于同一划分。额外留出未参与训练的生成方法，单独报告图片生成、图片篡改、视频篡改等任务的效果。
+```powershell
+.\.venv\Scripts\python.exe scripts/prepare_ffpp_faces.py --all --frames 16 --size 256 --workers 2
+```
 
-## 目录
+处理成功的组有缓存，恢复时跳过；改变抽帧数、裁剪尺寸、边界比例或检测权重会产生独立配置目录，不覆盖原始视频。新配置的清单名会包含新的配置编号。磁盘剩余不足 10 GiB 时停止新的目标组处理并记录错误。
 
-- data/raw/ai-face：AI-Face 官方归档与图片，目前尚未下载。
-- data/raw/ffpp：FF++ c23 原始与伪造视频，5000 个均已下载。
-- data/manifests：官方划分、下载收据及后续样本清单。
-- data/processed/ai-face、data/processed/ffpp：按需生成处理结果。
-- outputs：下载状态、日志、检查报告和实验结果。
+完成后，全量清单为 `data/manifests/ffpp-frames-full-93e2b370610e.csv`。运行同一个 check_data_loader.py 验证它。若进度报告 state=incomplete，先检查 errors，不能把部分输出当成全量成功。
 
-环境检查产生的合成文件仅用于验证程序，不能作为检测效果评估数据。
+## 裁脸规则与已知限制
+
+- 真实与各类伪造视频均使用相同 YuNet 参数：检测前将长边限制到 640，置信度阈值 0.8，选择最大人脸，扩大到 1.3 倍方框并限制在画面内，输出 256×256 PNG。
+- 原始与伪造视频长度可能不同，不假定逐帧对齐，不把原始视频某一帧的框直接套到伪造视频。每个视频独立均匀抽样、检测。
+- 没有人脸的采样帧记录在报告中并跳过，不以整张画面冒充人脸样本；多脸视频中最大人脸规则仍可能选错，需抽样查看。
+- 顺序遍历所有帧，解码取出的采样帧，并核对帧遍历数与元数据。未转换保存所有原始帧，不将这一检查描述为逐像素完整质量审查。
+- 图像帧保留 parent_video_id、source_video、frame_index、timestamp、crop_box、face_score 与来源分组。视频指标应先按 parent_video_id 汇总，再计算，不能把相邻帧当独立视频。
+- 官方文件名编号字段保留为 target_id/source_id；这里只用它们隔离相关来源，不据此假定所有伪造方法的逐帧映射相同。
+
+## 统一数据加载
+
+`src/faceguard/data.py` 的 FaceImageDataset 接受相同 CSV 格式的图片清单；来自视频的帧也以图片形式加载。默认返回 RGB、float32、[0,1] 范围、CHW 形式的张量以及标签和来源信息。预训练模型需要的归一化由后续训练 transform 明确配置。
+
+```python
+from faceguard.data import FaceImageDataset
+from torch.utils.data import DataLoader
+
+dataset = FaceImageDataset(
+    'data/manifests/ffpp-frames-preview-1-93e2b370610e.csv',
+    split='train',
+)
+loader = DataLoader(dataset, batch_size=16, shuffle=True, num_workers=0)
+batch = next(iter(loader))
+images, labels = batch['image'], batch['label']
+```
+
+在自建脚本中先将项目 `src` 目录加入 Python 模块路径，方式可参考 scripts/check_data_loader.py。Windows 后续使用多进程 DataLoader 时需将入口放在 `if __name__ == '__main__':` 内；当前验证使用 num_workers=0。
+
+新图片集需提供相同字段：sample_id、path、label（真实0/伪造1）、dataset、task、method、compression、target_id、source_id、group_id、split、media_type=image、provenance_status=verified。没有语义的压缩、视频编号字段可留空。保留可审计的来源后才能标为 verified；这一字段不是自动证明许可或标签准确性的工具。
+
+加载器在过滤划分前检查全清单中的重复路径、编号和来源分组泄漏。派生数据应保留相同的全局 group_id；接入 AI-Face 时需要额外识别它与 FF++ 的重叠，不能只换 dataset 名称绕过分组规则。来源不明的第三方数据仍隔离，不自动进入正式加载器。
+
+验证命令：
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+## 人脸检测权重
+
+使用 OpenCV Zoo 官方 YuNet 2023mar：
+https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet
+
+模型下载到 weights/face_detection_yunet_2023mar.onnx；MIT 许可保存于 weights/YuNet-LICENSE.txt。模型 SHA256 为 `8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4`。
+
+```powershell
+Invoke-WebRequest -Uri 'https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx' -OutFile 'weights/face_detection_yunet_2023mar.onnx'
+Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/opencv/opencv_zoo/main/models/face_detection_yunet/LICENSE' -OutFile 'weights/YuNet-LICENSE.txt'
+```
+
+<a id="sources"></a>
+
+## 整脸生成与新增来源
+
+- 当前配套：LFW、FFHQ-256 镜像真实照片，以及 [FairFaceGen](https://zenodo.org/records/17062365) 的 FLUX / SD3.5 种子包。先在根目录运行 scripts/download_fairfacegen.py，再按 [生成检测复现](../reference_run/README.md#generation) 下载真实照片并统一裁脸。
+- 新来源实验使用过 OpenFake 与 FairFace 镜像，固定版本、数量、隔离和评测情况见 [实验记录](EXPERIMENTS.md#session-20261026)。
+- 后续候选入口：[AI-Face](https://github.com/Purdue-M2/AI-Face-FairnessBench)、[DiFF](https://github.com/iLearn-Lab/MM24-DiFF)、[Community Forensics](https://jespark.net/projects/2024/community_forensics/)。这些是历史候选，不代表已下载或已验证；取得数据前核对条款、实际生成方法与存储需求。
+
+<a id="unverified"></a>
+
+## 来源不明的数据
+
+2026-10-17 检查过用户提供的第三方归档，索引共 116,863 个文件，包含图片和视频，也含非人脸内容。提供方标签、分辨率、帧率与时长差异不能作为可靠真假依据。未获得原始来源、许可和标签依据前，不纳入正式训练或独立测试；本机检查收据为 outputs/local-data-inspection.json，清单为 data/manifests/third-party-unverified.csv。
+
+## 划分原则
+
+训练、验证和最终测试分开；同一人物（已知时）、源视频、原图及其编辑 / 压缩 / 裁剪版本保持同组。跨库检查精确重复与近重复，AI-Face 如包含 FF++ 派生帧需额外排除交叉泄漏。没有找到人脸的输入单独记录，不能标为真实。数据、模型、缓存与个人素材不放入 Git；素材许可不由项目 MIT 许可证代替。

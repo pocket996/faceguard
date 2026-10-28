@@ -19,7 +19,7 @@ def main():
         import tkinter as tk
         from tkinter import messagebox
         root=tk.Tk();root.withdraw()
-        messagebox.showerror('实验模型暂不可用','本机实验权重不存在或校验失败。克隆源码不包含这些权重。\n请查看 SESSION_2026-10-26.md；稳定发布包仍可单独使用。\n\n'+str(error),parent=root)
+        messagebox.showerror('实验模型暂不可用','本机实验权重不存在或校验失败。克隆源码不包含这些权重。\n请查看 ../docs/EXPERIMENTS.md；稳定发布包仍可单独使用。\n\n'+str(error),parent=root)
         root.destroy();return 1
     from gui import main as gui_main
     gui_main();return 0

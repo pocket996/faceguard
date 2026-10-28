@@ -96,12 +96,12 @@ LFW 按已知人物分组，生成脸按种子编号分组；FFHQ 镜像按图�
 
 代码阅读顺序：`generation_common.py`（统一预处理）→ `prepare_generation.py`（来源及划分）→ `train_generation.py`（独立训练）→ `face_analysis.py`（模型和路由）→ `verify_generation.py`（含 GPT 个例的训练外核验）→ `gui.py`（界面）。
 
-复现命令见 `GENERATION_README.md`。原换脸模型及其结果仍在 `RESULTS.md`，不能将两个任务的成绩互相替代。当前模型是实验版；要更可靠地检测 GPT 等新工具，仍需补充多个生成器、更多真实来源、身份/近重复审计以及成规模的独立 GPT 测试。
+复现命令见 `../reference_run/README.md`。原换脸模型及其结果仍在 `RESULTS.md`，不能将两个任务的成绩互相替代。当前模型是实验版；要更可靠地检测 GPT 等新工具，仍需补充多个生成器、更多真实来源、身份/近重复审计以及成规模的独立 GPT 测试。
 
 来源：[LFW / scikit-learn](https://scikit-learn.org/stable/datasets/real_world.html#the-labeled-faces-in-the-wild-face-recognition-dataset)、[FFHQ 官方说明](https://github.com/NVlabs/ffhq-dataset)、[使用的 FFHQ 镜像](https://huggingface.co/datasets/bitmind/ffhq-256)、[FairFaceGen](https://zenodo.org/records/17062365)。
 '''
-    (HERE / 'GENERATION_RESULTS.md').write_text(text, encoding='utf-8')
-    print('Wrote GENERATION_RESULTS.md; GPT individual detection:', gpt_detected)
+    (out / 'GENERATION_RESULTS.md').write_text(text, encoding='utf-8')
+    print('Wrote artifacts/generation/GENERATION_RESULTS.md; GPT individual detection:', gpt_detected)
 
 
 if __name__ == '__main__':

@@ -76,7 +76,7 @@ def main():
         parser.error('Positive frame/size/pair counts and margin >= 1 required')
     cv2.setNumThreads(1)
     if not args.model.is_file():
-        parser.error('YuNet model is missing; see docs/ffpp-preparation.md')
+        parser.error('YuNet model is missing; see docs/data-setup.md')
     rows = read_manifest(ROOT / 'data/manifests/ffpp-videos.csv')
     validate_manifest(rows)
     receipts = json.loads((ROOT / 'data/manifests/ffpp-download-receipts.json').read_text())

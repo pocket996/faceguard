@@ -92,14 +92,14 @@ LFW 校验 scikit-learn 发布的 SHA256；FFHQ 镜像固定提交和 LFS SHA256
 
 关闭旧窗口，重新双击 run_demo.cmd。选择照片 → 开始检测 → 看「疑似 AI 整脸生成」或「未检出明显生成特征」。默认视频走原换脸/篡改模型。要检查照片换脸，在顶部切换「检测项目」。
 
-复现见 GENERATION_README.md。源码重点：generation_common.py、prepare_generation.py、train_generation.py、calibrate_generation.py、face_analysis.py、verify_generation.py、gui.py。当前模型为 artifacts/generation/joint/model.pt；READY.json 表示该版本经过核验并被默认启用。
+复现见 ../reference_run/README.md。源码重点：generation_common.py、prepare_generation.py、train_generation.py、calibrate_generation.py、face_analysis.py、verify_generation.py、gui.py。当前模型为 artifacts/generation/joint/model.pt；READY.json 表示该版本经过核验并被默认启用。
 
 仍需补充更多生成器（尤其多个 GPT 版本）、更多真实来源、跨来源身份/近重复审计以及真正独立的外部测试。当前完成了能运行、能分任务、保留失败实验与真实成绩的实验版功能，尚未证明通用可靠性。
 
 数据来源：[LFW / scikit-learn](https://scikit-learn.org/stable/datasets/real_world.html#the-labeled-faces-in-the-wild-face-recognition-dataset)、[FFHQ 官方说明](https://github.com/NVlabs/ffhq-dataset)、[FFHQ 镜像](https://huggingface.co/datasets/bitmind/ffhq-256)、[FairFaceGen](https://zenodo.org/records/17062365)。
 '''
-    (HERE / 'GENERATION_CURRENT.md').write_text(text, encoding='utf-8')
-    print('Wrote GENERATION_CURRENT.md; GPT regression:', gpt['detected_generation'])
+    (base / 'joint' / 'GENERATION_CURRENT.md').write_text(text, encoding='utf-8')
+    print('Wrote artifacts/generation/joint/GENERATION_CURRENT.md; GPT regression:', gpt['detected_generation'])
 
 
 if __name__ == '__main__':

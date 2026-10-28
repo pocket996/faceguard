@@ -152,11 +152,8 @@ def main():
 
 来源：[OpenFake固定版本与研究许可](https://huggingface.co/datasets/ComplexDataLab/OpenFake/blob/3247b942f18d39d1fd476b1077852af033d35d8c/README.md)、[FairFace原作者](https://github.com/joojs/fairface)、[FairFace镜像固定版本](https://huggingface.co/datasets/HuggingFaceM4/FairFace/tree/54d573cdb8b5af490ba8da9da2799628f6e5c496)、[SBI论文](https://arxiv.org/abs/2204.08376)、[Face X-Ray论文](https://arxiv.org/abs/1912.13458)。素材和模型权利不因自有代码采用MIT而改变；本轮不再分发数据或新模型。
 '''
-    docs=HERE.parent/'docs';docs.mkdir(exist_ok=True)
-    (docs/'AUTONOMOUS_SESSION_2026-10-26.md').write_text(text,encoding='utf-8')
     (base/'REPORT_zh.md').write_text(text,encoding='utf-8')
-    (HERE/'SESSION_2026-10-26.md').write_text('# 本轮开发版与实验记录\n\n详细大白话报告见 [本轮结果与不足](../docs/AUTONOMOUS_SESSION_2026-10-26.md)。\n\n稳定模型界面：run_demo.cmd。明确标注的本机实验候选：run_experimental_demo.cmd。后者需要outputs中的本机训练权重，源码克隆不包含这些权重。原GitHub v0.1.0包没有被本轮覆盖。\n',encoding='utf-8')
-    print('Generated plain-language report, source entry, comparison tables and SUMMARY.json.',flush=True)
+    print('Generated report and SUMMARY.json in the session output directory.',flush=True)
 
 
 if __name__=='__main__':main()

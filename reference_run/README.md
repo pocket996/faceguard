@@ -1,71 +1,25 @@
-# FaceGuard：从现有数据到可运行模型的独立参考实现
+# 训练与实验复现
 
-**2026-10-26源码开发版**：详见 [本轮结果与不足](../docs/AUTONOMOUS_SESSION_2026-10-26.md)。当前自动模式对检出的每张照片人脸分别运行生成与篡改检查；可以按编号放大查看、取消检测。视频保留原16帧整段规则，另提供按验证数据选阈值的局部复核，不能把更多抽帧当成已解决漏检。`run_experimental_demo.cmd`明确打开本机实验候选，稳定权重不覆盖；克隆源码不含候选权重。下文关于最大脸/16帧平均描述的是原基线和v0.1.0，复现旧结果时使用 `predict.py --video-sampling legacy`。
+先完成 [环境安装](../docs/TEAM_ENV_SETUP.md)、[数据准备](../docs/data-setup.md) 和根目录 README 中的模型资源准备。以下基线和生成训练命令均在 reference_run 目录执行，使用根目录 .venv；新候选一节的命令在仓库根目录执行。
 
-**新增 AI 整脸生成检测分支**：使用方式与当前联合模型实测结果分别见 [GENERATION_README.md](GENERATION_README.md)、[GENERATION_CURRENT.md](GENERATION_CURRENT.md)。第一版跨生成器实验另存 GENERATION_RESULTS.md。现在默认照片检测整脸生成，视频检测换脸/面部篡改；照片要查换脸时，在界面上方切换「检测项目」。下文记录原 FF++ 第一阶段，数据状态以新增分支报告为准。
+- [FF++ 换脸训练](#ffpp-training)
+- [整脸生成训练](#generation)
+- [10 月 26 日候选复查](#candidate)
+- [实验结果与能力限制](../docs/EXPERIMENTS.md)
 
-**队友直接使用**：推荐下载 [Windows CPU 免安装预览版](https://github.com/pocket996/deepfake-detection/releases/tag/v0.1.0)，解压后双击 FaceGuard.exe。[操作说明](../docs/TEAM_QUICKSTART.md)。
-
-**Git 源码快照说明**：源码树不包含本机 `.venv`、数据集、模型权重、特征、运行日志及个人测试图片；Release 附件另包含便携运行时与必要推理模型。下文“已经准备好”描述的是实测机器；新机器若需要源码训练，需先按本文及 GENERATION_README.md 重建环境和准备数据。YuNet 权重的获取方法见父目录 docs/ffpp-preparation.md。
-
-这是供学习和复现的**人脸换脸/篡改检测基线**。包含数据审计、真实训练、参数选择、视频级测试、未见方法实验、图片/视频推理和本地桌面演示。准确结果和实际耗时见 [RESULTS.md](RESULTS.md)。
-
-采用 ImageNet 预训练 ResNet18，完成两种真实训练：先冻结骨干训练逻辑回归分类层作为对照，再全网微调。桌面演示默认使用微调模型；两个模型和全部结果分别保留。**没有训练时序模型**，视频使用逐帧检测后取平均；不能把它当作覆盖所有 AI 图片和视频的成品。
-
-## 1. 隔离方式
-
-- 独立代码：`D:\deepfake-detection\reference_run`。
-- 独立虚拟环境：本目录 `.venv`。依赖是原环境的物理副本，已经运行 pip check；不是 `--system-site-packages`，没有链接回原环境。
-- 独立权重、特征、模型、结果：本目录 `weights`、`artifacts`。
-- 原始数据及已处理图片只读取，不重新复制约 8.4 GiB 视频，也不改动原项目代码、数据、环境、输出。
-- Python 3.11 基础解释器和 NVIDIA 驱动由两个虚拟环境共享，这是普通 venv 的工作方式。包安装互相隔离，不是虚拟机。
-- 代码仅依赖本目录的 Python 模块；训练默认读取父项目已有的 FF++ 数据清单。移动目录时需要一起保留数据目录结构或相应调整 `core.py` 的 `PROJECT`。
-
-打开 PowerShell，执行：
-
-```powershell
-cd D:\deepfake-detection\reference_run
-.\.venv\Scripts\python.exe -m pip check
-```
-
-不需要激活环境，也不需要改 PowerShell 执行策略。不要用裸 `python` 或 `pip`，以免进入系统 Python 3.13。
-
-## 2. 先体验已经训练好的模型
-
-双击 `run_demo.cmd`，或：
-
-```powershell
-.\.venv\Scripts\python.exe gui.py
-```
-
-界面按下面三步操作：
-
-1. **选文件**：左侧点「选择照片」或「选择视频」。第一次可以直接点「载入真实照片示例」或「载入 AI 生成示例」，中间会显示画面预览。在上方选择「换脸 / 面部篡改」后，示例按钮会切换为视频示例。
-2. **开始检测**：确认预览后，点左侧蓝色「开始检测」。右侧会显示模型加载、视频读取、人脸分析等进度。首次加载可能需要几十秒。
-3. **看结果**：右侧显示「疑似人脸篡改」「未检出明显篡改」或「未找到可分析的人脸」。可点击「保存检测报告」导出中文文本；模型阈值和逐帧分数在「查看技术详情」中。
-
-换文件时重新从第一步开始。示例按钮只负责载入文件，还需要点击「开始检测」。程序只在本机运行。照片检测最大人脸；视频均匀采样最多 16 帧，每帧检测最大人脸。没有检测到人脸会明确返回“无法判断”。长视频局部篡改可能落在采样间隔内；多脸画面也可能遗漏目标。
-
-命令行：
-
-```powershell
-.\.venv\Scripts\python.exe predict.py 'D:\你的文件夹\照片.jpg' --task manipulation
-.\.venv\Scripts\python.exe predict.py 'D:\你的视频.mp4' --output artifacts/my_prediction.json
-```
-
-已经裁好的人脸图片可加 `--face-crop`；普通照片不要加。分数越高代表模型倾向于篡改，但分数没有经过概率校准，`0.9` 不等于“90% 概率为假”。图片和视频使用各自在验证集选出的阈值；图片阈值来自视频帧，不是独立照片验证集。
+<a id="ffpp-training"></a>
 
 ## 3. 从头复现模型训练
 
-前置数据已经完成：5,000 段 FF++ c23 视频 → 统一 YuNet 裁脸 → 79,994 张 PNG。原项目 `scripts/prepare_ffpp_manifest.py`、`scripts/prepare_ffpp_faces.py` 以及 `docs/ffpp-preparation.md` 记录下载、官方划分和裁脸过程。这次读取其真实产物，未重新下载或重做裁脸。
+前置数据已经完成：5,000 段 FF++ c23 视频 → 统一 YuNet 裁脸 → 79,994 张 PNG。原项目 `scripts/prepare_ffpp_manifest.py`、`scripts/prepare_ffpp_faces.py` 以及 `../docs/data-setup.md#ffpp` 记录下载、官方划分和裁脸过程。这次读取其真实产物，未重新下载或重做裁脸。
 
 ```powershell
-.\.venv\Scripts\python.exe train.py
-.\.venv\Scripts\python.exe holdout.py
-.\.venv\Scripts\python.exe finetune.py
-.\.venv\Scripts\python.exe verify.py
-.\.venv\Scripts\python.exe verify.py --variant finetuned
-.\.venv\Scripts\python.exe make_report.py
+..\.venv\Scripts\python.exe train.py
+..\.venv\Scripts\python.exe holdout.py
+..\.venv\Scripts\python.exe finetune.py
+..\.venv\Scripts\python.exe verify.py
+..\.venv\Scripts\python.exe verify.py --variant finetuned
+..\.venv\Scripts\python.exe make_report.py
 ```
 
 `train.py` 首次下载约 45 MB 官方 ImageNet 权重到本目录；随后遍历所有图片，核对路径、来源分组、重复编号，并计算解码后像素的 SHA256，遇到跨划分的精确重复会停止。它不能检测近重复、同人不同照或跨库身份泄漏。特征为冻结网络的 FP32 输出，保存在 `artifacts/features.npy`，约 156 MiB。
@@ -94,44 +48,106 @@ cd D:\deepfake-detection\reference_run
 
 结果保存在 `holdout_metrics.json`，另存 `model_holdout.pt`，不替换主模型。这是同一个 FF++ 数据集内的方法留出，**不是跨数据集测试**，也不能说明能识别 FLUX、SD3.5 或整段 AI 生成视频。
 
-## 5. 需要准备的内容
 
-| 目标 | 当前数据是否够用 | 尚缺什么 |
-| --- | --- | --- |
-| 学习换脸/面部篡改完整流程 | 够用 | 当前参考实现已完成模型侧闭环 |
-| 比较更强的换脸模型 | 够做库内实验 | 微调、多个随机种子、压缩与缩放扰动测试 |
-| 对陌生来源视频证明泛化 | 不够 | 独立数据集，例如申请 Celeb-DF / DFDC，并固定外部测试协议 |
-| 检测 AI 整脸生成照片 | 实验版配套已补齐 | 已补真实照片并完成独立生成检测分支；仍缺多版本 GPT 等新工具的大规模外部测试，详见 GENERATION_CURRENT.md |
-| 检测整段 AI 生成视频 | 不够 | 来源明确的生成视频、匹配真实视频和独立测试；FF++ 不能替代 |
-| 公开发布或商用 | 当前没有验证这个条件 | 确认各数据和权重的使用、再分发条款 |
+<a id="generation"></a>
 
-第三方来源不明的图片/视频未用于本实验。AI-Face 目录仍为空。FairFaceGen 的下载完成不代表已获得明确的数据使用条款；原项目文档也记录了这一待确认事项。
+## 整脸生成训练
 
-建议先把“换脸/人脸篡改”作为第一阶段交付范围，再单独做整脸生成，最后考虑联合模型。不要把“人脸帧和生成头像来源不同”导致的高分当成检测能力。
+## 数据、环境与隔离
 
-## 6. 算力和时间安排
+当前使用父项目根目录 `.venv`，通用依赖已包含 `pyarrow==23.0.1` 读取 Parquet；本目录锁定文件保留历史环境记录，重建方法见 [主环境说明](../docs/TEAM_ENV_SETUP.md)。所有新原始照片、处理结果和清单在 `reference_run/data`；模型与评估在 `artifacts/generation`。父目录的 FairFaceGen ZIP 只读取，原 FF++ 模型没有覆盖。
 
-本机 RTX 5070 Laptop 8GB、约 16GB 内存，足以完成这版冻结骨干基线，也能在小批量和混合精度下尝试 ResNet18 微调。**目前无需购买云服务器**。需要更多显存、大模型、大量消融实验或长时间连续训练时，再考虑按小时租 GPU；先用本机测一次吞吐再预算，不必先买服务器。
+来源分别为 scikit-learn 固定校验值的 LFW、固定提交和 SHA256 的 FFHQ 公开镜像两个分片、已经下载并校验的官方 FairFaceGen 种子包。下载脚本不需要账户密钥。镜像没有完整身份与逐图许可元数据，未建立商用或图片再分发资格；数据不提交到 Git。
 
-实际本次耗时和显存见 RESULTS.md；以下是计划估算，不是已测结果：
+## 从数据到模型
 
-| 工作 | 预计时间 | 条件 |
-| --- | --- | --- |
-| 运行现成演示 | 几分钟 | 环境与模型已经准备好 |
-| 重建 GPU 环境 | 10–60 分钟 | 需要下载数 GB 依赖，网络慢会更久 |
-| 复现冻结骨干模型 | 5–30 分钟 | 已有全部处理图；首次需要提取特征 |
-| 从视频重新抽帧裁脸 | 约 0.5–2 小时 | 当前已有产物，无需再做；历史日志约半小时完成 |
-| 从零下载 FF++ | 数十分钟到数小时，可能更久 | 约 9 GB；申请与跨境网络等待另计 |
-| ResNet18 全网微调一轮实验 | 本次约 9.4 分钟；扩大训练预算粗估 0.5–2 小时 | 本次 4 轮、每轮 4 帧/视频；扩大到 5–15 轮且每轮 16 帧时需重新测速 |
-| 你读懂并独立复现第一阶段 | 约 1–2 周业余时间 | 每天 1–3 小时，熟悉 Python 会更快 |
-| 补齐生成照片、外部测试、对比实验与报告 | 约 4–8 周 | 数据申请/获取等待可能成为主要耗时 |
+```powershell
+..\.venv\Scripts\python.exe download_lfw.py
+..\.venv\Scripts\python.exe download_ffhq_subset.py
+..\.venv\Scripts\python.exe prepare_generation.py
+..\.venv\Scripts\python.exe train_generation.py
+..\.venv\Scripts\python.exe calibrate_generation.py
+..\.venv\Scripts\python.exe verify_generation.py
+..\.venv\Scripts\python.exe report_generation.py
+# 覆盖两种已知生成器的联合版；本版本 SD3.5 不再是未见生成器
+..\.venv\Scripts\python.exe train_generation.py --include-sd35
+..\.venv\Scripts\python.exe calibrate_generation.py --experiment joint
+..\.venv\Scripts\python.exe verify_generation.py --experiment joint
+..\.venv\Scripts\python.exe activate_generation.py
+..\.venv\Scripts\python.exe gui.py --self-test --self-test-task generation
+..\.venv\Scripts\python.exe gui.py --self-test --self-test-task manipulation
+..\.venv\Scripts\python.exe report_generation_joint.py
+```
 
-D 盘创建环境后仍剩约 179 GiB；无需全量再下载一个超大数据集。新环境有数 GB，数据缓存和权重另占几百 MB；本次磁盘实测见 `artifacts/storage.json`。
+父项目 `data/raw/fairfacegen` 下需有两个种子包；若缺少，先运行父项目 `scripts/download_fairfacegen.py`。当前已经具备。重跑 `prepare_generation.py` 会在本参考目录重建派生图片与清单，原始数据保留。
 
-## 7. 推荐阅读顺序
+整脸生成模型训练 5 轮，每轮遍历全部生成任务的训练图片。ResNet18 从 ImageNet 权重初始化并全网微调，AdamW、骨干学习率 1e-4、分类层 3e-4，余弦调度，批量 48，CUDA 混合精度。损失依次平衡真假类别、真实照片来源和已知分组，避免 LFW 中照片多的人物主导训练。
 
-先运行演示 → 看 RESULTS.md → 看 `core.py` 的预处理与推理 → 看 `train.py` 的 train/val/test 分工 → 看 `finetune.py` 如何更新骨干 → 看 `holdout.py` → 运行 `verify.py`。每次只改一件事，保留同一划分，并用验证集决定是否接受。留出方法实验目前只做了冻结骨干版，不能把微调主模型的成绩当成微调模型的未见方法成绩。
+**第一版单生成器实验**：FLUX 按种子分到 train/val/test；真实照片中 LFW 按人物名称、FFHQ 镜像按图片分组。该版本中 SD3.5 **不参与训练和调参**。只看验证集 AUC 选择轮次，只用验证集 balanced accuracy 选阈值。`calibrate_generation.py` 将阈值放在同一个最优验证决策区间的中点；验证分类保持不变，避免贴在最小生成分数上，整个过程不使用测试集或用户图片选择阈值。保存最终阈值后，再统一计算最终测试、SD3.5 和 JPEG 指标。初始阈值的原始结果保存在 pre_calibration_metrics.json，不隐藏该阶段。SD3.5 测试复用同一真实测试集，不能把这两个指标当成完全独立的实验。
 
-重建环境时先用 Python 3.11 创建本目录 `.venv`，再使用该环境的 `python.exe -m pip install -r requirements-lock.txt`。这个锁定文件适用于 Windows x64 / Python 3.11 / CUDA 12.8，CPU 或 Linux 不要直接照搬其中的 Windows GPU wheel 地址。当前参考目录内的 `.venv` 已经建好，无需重复安装。
+用户提供的 GPT 图片在模型选定后才检查，未用于训练、调参，也没有针对其文件名或标签加规则。它是单张个例，不能用来宣称“支持所有 GPT 生成图”。
 
-官方资料：[FF++ 数据与划分](https://github.com/ondyari/FaceForensics/blob/master/dataset/README.md)、[Torchvision ResNet18](https://docs.pytorch.org/vision/0.24/models/generated/torchvision.models.resnet18.html)、[YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet)、[FairFaceGen 发布页](https://zenodo.org/records/17062365)。
+第一版发现未见 SD3.5 召回率低，因此追加独立联合版：对 SD3.5 使用同一固定分组哈希建立 train/val/test，与 FLUX 一起训练。原始全部留出实验保留，不把联合版的 SD3.5 测试包装成未见测试。两个版本都不使用用户图片训练或调阈值，但该 GPT 个例在第一版已被观察过，联合版再次检查属于重复回归。
+
+联合版数据清单、权重、指标、阈值及回归结果在 `artifacts/generation/joint`。`activate_generation.py` 只在模型哈希与核验一致、且验证集 balanced accuracy 至少 0.90 时写入 READY.json，随后照片默认路由到联合版。该启用条件不根据测试集或 GPT 个例的结果决定。
+
+## 关键文件
+
+| 文件 | 作用 |
+| --- | --- |
+| generation_common.py | 训练与推理共用的 128px / JPEG90 标准化 |
+| prepare_generation.py | 统一 YuNet 裁脸，分组划分，精确重复隔离，记录未检出人脸 |
+| train_generation.py | 独立训练、验证集选模型、正式与未见生成器评估 |
+| face_analysis.py | 整脸生成推理，以及照片/视频任务路由 |
+| verify_generation.py | 原图与清单分数、CPU/GPU、无脸、跨来源真实帧、用户 GPT 个例检查 |
+| artifacts/generation/metrics.json | 各划分指标、真实类误报率、JPEG 重压缩成绩与耗时 |
+| artifacts/generation/user_gpt_regression.json | 用户图片的实际输出与原篡改分支对照 |
+| data/generation_manifest.csv | 每张图片的原始来源、ZIP 成员、分组、划分、处理图路径和像素 SHA256 |
+
+仍存在数据来源、人物和生成器覆盖限制：FFHQ 镜像无身份标签；未做生物身份或近重复审计。单生成器版本仅用 FLUX，当前联合版本用 FLUX 与 SD3.5，但均没有规模化 GPT 专项训练/测试。统一格式不能完全消除来源差异。高 AUC 和单张 GPT 个例结果都不能替代更广泛的独立测试。
+
+<a id="candidate"></a>
+
+## 10 月 26 日实验候选复查
+
+候选入口为 run_experimental_demo.cmd，依赖本机 outputs 内的选型记录和权重，Git 克隆不包含。稳定模型仍用 run_demo.cmd。
+
+## 结果在哪里
+
+本次固定目录为 `outputs/autonomous-20261026/started-1248`。
+
+| 文件/目录 | 作用 |
+| --- | --- |
+| source-before | 改动前源码副本 |
+| near-duplicate-audit | 43521张外观指纹与142对跨集合候选 |
+| clean-generation | 保守隔离清单，含947张隔离记录 |
+| openfake-subset / openfake-prepared | 原始下载凭据、固定修订、处理与分组记录 |
+| fairface-exam / locked-exam | 仅用于外部考试的真实来源及合并考试清单 |
+| generation-selection.json / photo-selection.json | 仅验证集选择的排名、阈值、模型SHA |
+| exam-locked-models.json | 看外部结果前冻结的候选 |
+| generation-external-* / photo-external-* | 原模型与冻结候选的外部成绩 |
+| video-val / video-test / video-policy | 视频记录、验证集阈值与测试成绩 |
+| sparse-video | 同编码控制与0.4/0.8秒替换练习，含对齐排除记录 |
+| integration.json | 25项测试与界面流程检查记录 |
+| user-regression-local.json | 私人样本的本地回归，未上传，不是盲测 |
+| original-model-hashes-final.json | 原模型未改变的检查 |
+| SUMMARY.json / REPORT_zh.md | 汇总与大白话报告 |
+
+每次作业的`*-args.json`保存实际参数，`*-run`保存输出、失败、温度及资源保护记录。内存不足中止的尝试没有冒充完成的训练。
+
+## 再做一个独立实验，不覆盖稳定模型
+
+以下命令复用本机已经审计的数据清单，输出到新目录。换电脑先按`README.md#generation`和FF++数据说明重新准备合法来源的数据、环境和初始模型。绝对路径清单需要重建，不能盲目照搬。
+
+```powershell
+cd D:\faceguard
+$sessionRoot = 'outputs/autonomous-20261026/started-1248'
+& .\.venv\Scripts\python.exe reference_run\train_generation.py --include-sd35 --manifest "$sessionRoot/openfake-prepared/combined_manifest.csv" --output outputs/my-generation-run --allow-openfake --source-balanced-selection --balanced-sampling --skip-test --epochs 5 --workers 0 --batch-size 32
+& .\.venv\Scripts\python.exe reference_run\train_photo_supervision.py --photos "$sessionRoot/photo-supervision-data/manifest.csv" --output outputs/my-photo-run --mask-weight 0.2 --epochs 4 --workers 0 --batch-size 32
+```
+
+单独做标签对照时改为`--mask-weight 0`并使用另一个输出目录。除位置监督权重外，数据、种子、批次和训练轮次保持一致。真实伪造掩码未知时，不得把合成练习答案说成真实位置标注。
+
+训练/验证/最终考试保持分离；`--skip-test`让训练阶段不顺手打开考试。看过本轮外部错题后继续改模型，这批数据就属于开发材料，下一轮需要未使用的新考试。不要为了分数好看重复挪本次阈值。
+
+本机临时PowerShell保护器是当日专用，截止16:48；不作为通用调度脚本发布。继续实验应设置新的明确期限、保持资源余量，不同时开多项重训练。此次16GB内存曾因多进程加载不足而停止，单进程串行才完成。无需为复现本轮另装绘图库。
