@@ -1,4 +1,5 @@
 """Compare photo candidates, validation-only recalibration, and controlled-map diagnostics."""
+from project_io import resolve_data_path, data_location
 import argparse
 import csv
 from pathlib import Path
@@ -22,7 +23,7 @@ class PhotoImages(Dataset):
     def __len__(self):return len(self.rows)
     def __getitem__(self,index):
         row=self.rows[index]
-        with Image.open(HERE/(row.get('face256_path') or row['path'])) as source:image=source.convert('RGB')
+        with Image.open(resolve_data_path(HERE/(row.get('face256_path') or row['path']))) as source:image=source.convert('RGB')
         if self.canonical:image=canonical_face(image)
         return self.transform(image)
 
@@ -51,10 +52,10 @@ def probe_masks(state,rows,device):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--checkpoint',type=Path,required=True)
-    parser.add_argument('--manifest',type=Path,required=True)
+    parser.add_argument('--checkpoint',type=resolve_data_path,required=True)
+    parser.add_argument('--manifest',type=resolve_data_path,required=True)
     parser.add_argument('--split',choices=['val','test','external_test'],default='val')
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--output',type=resolve_data_path,required=True)
     parser.add_argument('--calibrate',action='store_true',help='Only for validation; make a new threshold-only checkpoint')
     parser.add_argument('--probe-masks',action='store_true')
     parser.add_argument('--device',default='cuda')

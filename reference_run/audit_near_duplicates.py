@@ -1,4 +1,5 @@
 """Screen perceptually similar crops across splits; candidates require review, not identity claims."""
+from project_io import resolve_data_path, data_location
 import argparse
 from collections import Counter, defaultdict
 import csv
@@ -14,7 +15,7 @@ from project_io import HERE,digest,save_json
 
 def perceptual_hash(path):
     # Reading bytes also supports non-ASCII Windows paths.
-    image = cv2.imdecode(np.frombuffer(Path(path).read_bytes(), dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+    image = cv2.imdecode(np.frombuffer(resolve_data_path(path).read_bytes(), dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
     if image is None:
         raise ValueError(f'Cannot decode {path}')
     gray = cv2.resize(image, (32, 32), interpolation=cv2.INTER_AREA).astype(np.float32)
@@ -47,8 +48,8 @@ def near_pairs(values, max_distance):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--manifest', type=Path, default=HERE / 'artifacts/generation/joint/manifest.csv')
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--manifest', type=resolve_data_path, default=resolve_data_path(HERE / 'artifacts/generation/joint/manifest.csv'))
+    parser.add_argument('--output', type=resolve_data_path, required=True)
     parser.add_argument('--distance', type=int, default=6)
     args = parser.parse_args()
     start = time.monotonic()
@@ -57,7 +58,7 @@ def main():
         rows = list(csv.DictReader(stream))
     hashes, candidates = [], []
     for i, row in enumerate(rows):
-        hashes.append(perceptual_hash(HERE / row['path']))
+        hashes.append(perceptual_hash(resolve_data_path(HERE / row['path'])))
         if (i + 1) % 5000 == 0:
             print(json.dumps(dict(stage='hash', done=i + 1, total=len(rows))), flush=True)
     for left, right, distance in near_pairs(hashes, args.distance):

@@ -1,4 +1,5 @@
 """Unseen-method experiment: exclude NeuralTextures from training AND validation."""
+from project_io import resolve_data_path, data_location
 from collections import Counter
 import json
 import time
@@ -16,8 +17,8 @@ from train import aggregate, metrics, select_threshold, write_csv
 def main():
     start = time.monotonic()
     torch.set_num_threads(4)
-    artifact = HERE / 'artifacts'
-    path = PROJECT / 'data/manifests/ffpp-frames-full-93e2b370610e.csv'
+    artifact = resolve_data_path(HERE / 'artifacts')
+    path = resolve_data_path(PROJECT / 'data/manifests/ffpp-frames-full-93e2b370610e.csv')
     rows = load_rows(path)
     meta = json.loads((artifact / 'features.json').read_text(encoding='utf-8'))
     if digest(path) != meta['manifest_sha256']:

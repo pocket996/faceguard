@@ -1,4 +1,5 @@
 """Combine separately frozen external sources; preserve both model-specific input representations."""
+from project_io import resolve_data_path, data_location
 import argparse
 from collections import Counter
 import csv
@@ -19,19 +20,19 @@ def read(path):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--openfake',type=Path,required=True)
-    parser.add_argument('--fairface',type=Path,required=True)
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--openfake',type=resolve_data_path,required=True)
+    parser.add_argument('--fairface',type=resolve_data_path,required=True)
+    parser.add_argument('--output',type=resolve_data_path,required=True)
     args=parser.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     (args.output/'raw_faces').mkdir(exist_ok=True)
     rows=[r for r in read(args.openfake) if r['split']=='external_test']+read(args.fairface)
     if any(r['split']!='external_test' for r in rows):raise ValueError('Unexpected development rows')
     if len({r['sample_id'] for r in rows})!=len(rows):raise ValueError('Duplicate exam IDs')
     cv2.setNumThreads(1)
-    detector=cv2.FaceDetectorYN.create(str(HERE/'weights/face_detection_yunet_2023mar.onnx'),'',(320,320),.8,.3,5000)
+    detector=cv2.FaceDetectorYN.create(str(resolve_data_path(HERE/'weights/face_detection_yunet_2023mar.onnx')),'',(320,320),.8,.3,5000)
     for row in rows:
         if row['label']=='0' and not row.get('face256_path'):
-            with Image.open(row['raw_path']) as source:image=ImageOps.exif_transpose(source).convert('RGB')
+            with Image.open(resolve_data_path(row['raw_path'])) as source:image=ImageOps.exif_transpose(source).convert('RGB')
             faces,_=detect_face_crops(cv2.cvtColor(np.asarray(image),cv2.COLOR_RGB2BGR),detector,max_faces=1)
             if not faces:raise ValueError('Previously accepted exam face is no longer detected')
             path=args.output/'raw_faces'/(row['sample_id']+'.png');faces[0]['image'].save(path)

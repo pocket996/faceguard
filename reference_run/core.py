@@ -1,4 +1,5 @@
 """Standalone FF++ reference model, data checks, and inference preprocessing."""
+from project_io import resolve_data_path, data_location
 import csv
 from collections import defaultdict
 from pathlib import Path
@@ -17,7 +18,7 @@ STD = [0.229, 0.224, 0.225]
 
 
 def load_rows(manifest):
-    with Path(manifest).open(encoding='utf-8-sig', newline='') as stream:
+    with resolve_data_path(manifest).open(encoding='utf-8-sig', newline='') as stream:
         rows = list(csv.DictReader(stream))
     if not rows:
         raise ValueError('Empty manifest')
@@ -39,7 +40,7 @@ def load_rows(manifest):
             if row.get(key):
                 sources[(row['dataset'], row[key])].add(row['split'])
         videos[row['parent_video_id']].add((row['split'], row['label'], row['group_id'], row['method']))
-        if not (PROJECT / row['path']).is_file():
+        if not (resolve_data_path(PROJECT / row['path'])).is_file():
             raise FileNotFoundError(row['path'])
     if any(len(v) != 1 for mapping in (groups, sources, videos) for v in mapping.values()):
         raise ValueError('Source/group/video metadata crosses splits or is inconsistent')
@@ -91,13 +92,13 @@ def score_images(model, head, transform, images, device, batch_size=16):
 class Predictor:
     def __init__(self, checkpoint=None, device=None):
         if checkpoint is None:
-            fine = HERE / 'artifacts/model_finetuned.pt'
-            checkpoint = fine if fine.is_file() else HERE / 'artifacts/model.pt'
+            fine = resolve_data_path(HERE / 'artifacts/model_finetuned.pt')
+            checkpoint = fine if fine.is_file() else resolve_data_path(HERE / 'artifacts/model.pt')
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
-        self.checkpoint_path = Path(checkpoint).resolve()
+        self.checkpoint_path = resolve_data_path(checkpoint).resolve()
         self.model_sha256 = digest(self.checkpoint_path)
         self.model, self.head, self.state = load_detector(checkpoint, self.device)
-        weight = HERE / 'weights/face_detection_yunet_2023mar.onnx'
+        weight = resolve_data_path(HERE / 'weights/face_detection_yunet_2023mar.onnx')
         if digest(weight) != self.state['yunet_sha256']:
             raise ValueError('YuNet weights differ from training preprocessing')
         self.detector = cv2.FaceDetectorYN.create(str(weight), '', (320, 320), 0.8, 0.3, 5000)
@@ -105,7 +106,7 @@ class Predictor:
 
     @torch.inference_mode()
     def predict(self, path, face_crop=False, progress=None, adaptive_video=False):
-        path = Path(path).resolve()
+        path = resolve_data_path(path).resolve()
         if adaptive_video and path.suffix.lower() not in ('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff'):
             if face_crop:
                 raise ValueError('--face-crop is only supported for images')

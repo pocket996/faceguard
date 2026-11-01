@@ -1,4 +1,5 @@
 """Frozen official ImageNet ViT features + source-balanced linear head, validation-only selection."""
+from project_io import resolve_data_path, data_location
 import argparse
 import csv
 import json
@@ -23,8 +24,8 @@ from train_generation import GenerationImages,audit,balanced_source_weights
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--manifest',type=Path,required=True)
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--manifest',type=resolve_data_path,required=True)
+    parser.add_argument('--output',type=resolve_data_path,required=True)
     parser.add_argument('--device',default='cuda')
     parser.add_argument('--batch-size',type=int,default=24)
     args=parser.parse_args()
@@ -36,7 +37,7 @@ def main():
     audit(rows,allow_sd35_training=True,allow_openfake=True)
     # External and old test rows are never encoded or used for selecting the head.
     selected=[r for r in rows if r['split'] in ('train','val')]
-    torch.hub.set_dir(str(HERE/'weights/torch'))
+    torch.hub.set_dir(str(resolve_data_path(HERE/'weights/torch')))
     weights=models.ViT_B_16_Weights.IMAGENET1K_V1
     encoder=models.vit_b_16(weights=weights).to(args.device).eval()
     encoder.heads=nn.Identity()
@@ -86,7 +87,7 @@ def main():
             state=dict(backbone={k:v.detach().cpu().clone() for k,v in encoder.state_dict().items()},head=head.state_dict(),
                 architecture='vit_b_16',task='whole_face_generation',preprocessing='generation128_jpeg90',
                 frame_threshold=threshold,video_threshold=threshold,
-                yunet_sha256=digest(HERE/'weights/face_detection_yunet_2023mar.onnx'),manifest_sha256=digest(args.manifest),
+                yunet_sha256=digest(resolve_data_path(HERE/'weights/face_detection_yunet_2023mar.onnx')),manifest_sha256=digest(args.manifest),
                 training_generators=sorted({r['method'] for r in train_rows if r['label']=='1'}),
                 real_sources=sorted({r['source'] for r in train_rows if r['label']=='0'}),
                 training_scope='Frozen ImageNet ViT + source-balanced linear head. Research-only GPT1 development; unseen generators never used for selection.',

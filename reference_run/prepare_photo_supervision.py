@@ -1,4 +1,5 @@
 """Isolated raw-photo crops for ordinary-photo false-alert and local-edit supervision experiments."""
+from project_io import resolve_data_path, data_location
 import argparse
 from collections import Counter
 import csv
@@ -16,13 +17,13 @@ from prepare_openfake_subset import write_rows
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--manifest',type=Path,required=True)
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--manifest',type=resolve_data_path,required=True)
+    parser.add_argument('--output',type=resolve_data_path,required=True)
     args=parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=True)
     (args.output/'crops').mkdir(exist_ok=True)
     cv2.setNumThreads(1)
-    detector=cv2.FaceDetectorYN.create(str(HERE/'weights/face_detection_yunet_2023mar.onnx'),'',(320,320),.8,.3,5000)
+    detector=cv2.FaceDetectorYN.create(str(resolve_data_path(HERE/'weights/face_detection_yunet_2023mar.onnx')),'',(320,320),.8,.3,5000)
     with args.manifest.open(encoding='utf-8-sig',newline='') as stream:
         original=[r for r in csv.DictReader(stream) if r['label']=='0']
     selected=[]
@@ -33,7 +34,7 @@ def main():
             selected.extend(group[:count])
     rows,rejected=[],[]
     for index,row in enumerate(selected):
-        with Image.open(row['raw_path']) as source:
+        with Image.open(resolve_data_path(row['raw_path'])) as source:
             image=ImageOps.exif_transpose(source).convert('RGB')
         faces,total=detect_face_crops(cv2.cvtColor(np.asarray(image),cv2.COLOR_RGB2BGR),detector,max_faces=4)
         if not faces:

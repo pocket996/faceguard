@@ -1,4 +1,5 @@
 """Check false alerts from both existing heads on genuine-source raw photos; no training."""
+from project_io import resolve_data_path, data_location
 import argparse
 from collections import defaultdict
 import csv
@@ -19,8 +20,8 @@ from generation_common import canonical_face
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--manifest',type=Path,required=True)
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--manifest',type=resolve_data_path,required=True)
+    parser.add_argument('--output',type=resolve_data_path,required=True)
     parser.add_argument('--per-source',type=int,default=150)
     args=parser.parse_args()
     torch.set_num_threads(2);cv2.setNumThreads(1)
@@ -37,7 +38,7 @@ def main():
     details=[]
     with torch.inference_mode():
         for row in selected:
-            path=Path(row['raw_path'])
+            path=resolve_data_path(row['raw_path'])
             if row.get('archive_member'):
                 with zipfile.ZipFile(path) as archive:
                     data=archive.read(row['archive_member'])

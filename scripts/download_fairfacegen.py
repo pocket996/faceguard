@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import sys
 import time
 import urllib.request
 import zipfile
@@ -18,7 +19,9 @@ FILES = {
     'flux-seed.zip': '87fd189e875d11f6f09269ad1d140afc',
     'sd35-seed.zip': '4e9b2531444ec20b7394d0f194111f7d',
 }
-DEST = ROOT / 'data/raw/fairfacegen'
+sys.path.insert(0, str(ROOT / 'src'))
+from faceguard.data_locations import data_location
+DEST = data_location('fairfacegen')
 STATUS = ROOT / 'outputs/fairfacegen-download-status.json'
 
 

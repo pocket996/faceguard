@@ -3,14 +3,14 @@ import argparse
 import json
 from pathlib import Path
 
-from project_io import HERE,save_json
+from project_io import HERE,save_json,resolve_data_path
 
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--session',type=Path,required=True)
     args=parser.parse_args();base=args.session
-    def read(name):return json.loads((base/name).read_text(encoding='utf-8-sig'))
+    def read(name):return json.loads(resolve_data_path(base/name).read_text(encoding='utf-8-sig'))
     old=read('generation-external-original/metrics.json');new=read('generation-external-selected/metrics.json')
     a,b=old['results']['clean'],new['results']['clean']
     photo_old=read('photo-external-original/metrics.json');photo_new=read('photo-external-selected/metrics.json')

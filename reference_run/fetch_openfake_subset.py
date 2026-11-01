@@ -1,4 +1,5 @@
 """Bounded public-viewer subset; no remote code, full shards, credentials, or dataset upload."""
+from project_io import resolve_data_path, data_location
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
@@ -52,7 +53,7 @@ def request_bytes(url, limit, timeout=40):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--output', type=resolve_data_path, required=True)
     parser.add_argument('--metadata-only', action='store_true')
     parser.add_argument('--max-mb', type=int, default=3000)
     parser.add_argument('--scan-rows', action='store_true', help='Use documented rows API if server-side filtering is unavailable')

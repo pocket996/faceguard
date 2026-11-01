@@ -133,6 +133,9 @@ git remote -v
 
 ## 6. 环境好了，还能不能直接检测和训练？
 
+正式应用的检测入口现为根目录 `run_app.cmd` / `run_app.py`。完成前述推理依赖安装后，复制经核验的完整 `weights/runtime/`：`generation.pt`、`manipulation.pt`、`yunet.onnx`、`video_policy.json`、`YuNet-LICENSE.txt`、`manifest.json`。本机已有完整参考资源（含视频复核 policy）时，也可运行 `.\.venv\Scripts\python.exe scripts/migrate_reference_models.py` 生成该目录；旧版免安装包未必含 policy，不能只复制下列四个文件就当完整正式资源。模型不随 Git 分发；启动界面不等于检测资源已准备。正式推理不需要训练数据，也不导入参考目录。
+
+
 **运行环境、模型权重和训练数据是三样不同的东西。Git 克隆只带来源码和依赖说明。**
 
 | 目标 | 下一步 |
@@ -142,7 +145,7 @@ git remote -v
 | 训练换脸 / 篡改模型 | 按 [数据说明](data-setup.md) 和 [FF++ 预处理说明](data-setup.md#ffpp) 准备合法来源的数据与清单 |
 | 训练整脸生成模型 | 按 [生成检测复现说明](../reference_run/README.md#generation) 准备数据 |
 
-源码推理需要以下四个资源文件。可从 v0.1.0 解压后的 `FaceGuard` 文件夹中，按相同相对路径复制到项目的 `reference_run` 目录：
+以下是保留的参考入口所需四个核心资源。可从 v0.1.0 解压后的 `FaceGuard` 文件夹中，按相同相对路径复制到项目的 `reference_run` 目录：
 
 ```text
 reference_run/weights/face_detection_yunet_2023mar.onnx

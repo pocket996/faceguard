@@ -1,4 +1,5 @@
 """Controlled self-blending exercises with known proxy maps; not a reproduction of SBI/Face X-Ray."""
+from project_io import resolve_data_path, data_location
 import io
 import random
 
@@ -42,7 +43,7 @@ class LocalEditImages(Dataset):
 
     def __getitem__(self,index):
         row=self.rows[index]
-        with Image.open(HERE/row['path']) as source:
+        with Image.open(resolve_data_path(HERE/row['path'])) as source:
             image=source.convert('RGB')
         synthetic=bool(row.get('synthetic',False))
         if synthetic:

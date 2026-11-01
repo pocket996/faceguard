@@ -1,4 +1,5 @@
 """Fixed-checkpoint generation evaluation; calibration reads validation predictions only."""
+from project_io import resolve_data_path, data_location
 import argparse
 from collections import Counter
 import csv
@@ -27,7 +28,7 @@ class StressImages(Dataset):
         return len(self.rows)
 
     def __getitem__(self, index):
-        with Image.open(HERE / self.rows[index]['path']) as source:
+        with Image.open(resolve_data_path(HERE / self.rows[index]['path'])) as source:
             image = source.convert('RGB')
         if self.stress in ('jpeg40', 'jpeg60'):
             buffer = io.BytesIO()
@@ -53,12 +54,12 @@ def predict(encoder, head, rows, args, stress):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--checkpoint',type=Path,required=True)
-    parser.add_argument('--manifest',type=Path,required=True)
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--checkpoint',type=resolve_data_path,required=True)
+    parser.add_argument('--manifest',type=resolve_data_path,required=True)
+    parser.add_argument('--output',type=resolve_data_path,required=True)
     parser.add_argument('--split',choices=['val','test','external_test','train'],default='val')
     parser.add_argument('--stress',default='clean,jpeg60,jpeg40,resize64,blur1')
-    parser.add_argument('--calibrate-from',type=Path,help='CSV of this checkpoint validation predictions only; save new candidate, never overwrite source')
+    parser.add_argument('--calibrate-from',type=resolve_data_path,help='CSV of this checkpoint validation predictions only; save new candidate, never overwrite source')
     parser.add_argument('--device',default='cuda' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--workers',type=int,default=2)
     parser.add_argument('--batch-size',type=int,default=48)

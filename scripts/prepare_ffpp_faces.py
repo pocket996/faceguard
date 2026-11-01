@@ -14,6 +14,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 from faceguard.data import FRAME_FIELDS, read_manifest, validate_manifest, write_manifest
+from faceguard.data_locations import data_location, resolve_data_path, ffpp_receipt_key
 
 
 def sampled_frames(path, samples):
@@ -77,13 +78,13 @@ def main():
     cv2.setNumThreads(1)
     if not args.model.is_file():
         parser.error('YuNet model is missing; see docs/data-setup.md')
-    rows = read_manifest(ROOT / 'data/manifests/ffpp-videos.csv')
+    rows = read_manifest(data_location('ffpp_manifests') / 'ffpp-videos.csv')
     validate_manifest(rows)
-    receipts = json.loads((ROOT / 'data/manifests/ffpp-download-receipts.json').read_text())
+    receipts = json.loads((data_location('ffpp_manifests') / 'ffpp-download-receipts.json').read_text())
     config = dict(frames=args.frames, size=args.size, margin=args.margin,
                   model_sha256=hashlib.sha256(args.model.read_bytes()).hexdigest(), version=2)
     key = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()[:12]
-    output = ROOT / 'data/processed/ffpp' / key
+    output = data_location('ffpp_faces') / key
     cache = output / '_records'
     cache.mkdir(parents=True, exist_ok=True)
     selected_groups = set()
@@ -102,18 +103,18 @@ def main():
         original = next(row for row in target_rows if row['label'] == '0')
         record_path = cache / (original['target_id'] + '.json')
         fingerprint = hashlib.sha256(json.dumps(
-            [(r['sample_id'], receipts[r['path']]['sha256']) for r in target_rows]
+            [(r['sample_id'], receipts[ffpp_receipt_key(r['path'])]['sha256']) for r in target_rows]
         ).encode()).hexdigest()
         if record_path.is_file():
             prior = json.loads(record_path.read_text())
             if (prior['fingerprint'] == fingerprint and not prior['errors']
-                    and all((ROOT / r['path']).is_file() for r in prior['rows'])):
+                    and all(resolve_data_path(r['path'], ROOT).is_file() for r in prior['rows'])):
                 return prior
         record = {'fingerprint': fingerprint, 'rows': [], 'errors': [], 'checks': [], 'no_face': []}
         detector = cv2.FaceDetectorYN.create(str(args.model), '', (320, 320), 0.8, 0.3, 5000)
         for video in target_rows:
             try:
-                images, video_count, video_fps = sampled_frames(ROOT / video['path'], args.frames)
+                images, video_count, video_fps = sampled_frames(resolve_data_path(video['path'], ROOT), args.frames)
                 record['checks'].append({'sample_id': video['sample_id'], 'frames': video_count,
                                          'fps': video_fps, 'sampled_frames': len(images)})
                 for index, frame in images.items():
@@ -134,7 +135,7 @@ def main():
                         raise OSError(f'Cannot save crop: {path}')
                     row = dict(video)
                     row.update(sample_id=video['sample_id'] + f'_frame_{index:06d}',
-                        path=path.relative_to(ROOT).as_posix(), media_type='image',
+                        path=str(path), media_type='image',
                         parent_video_id=video['sample_id'], source_video=video['path'],
                         frame_index=index, timestamp=f'{index / video_fps:.6f}',
                         crop_box=json.dumps([x1, y1, x2, y2]), face_score=f'{score:.6f}')
@@ -147,7 +148,7 @@ def main():
         return record
 
     name = 'full' if args.all else f'preview-{args.pairs_per_split}'
-    manifest = ROOT / f'data/manifests/ffpp-frames-{name}-{key}.csv'
+    manifest = data_location('ffpp_manifests') / f'ffpp-frames-{name}-{key}.csv'
     report_path = ROOT / f'outputs/ffpp-preprocess-{name}-{key}.json'
     collected, errors, checks, misses = [], [], [], []
     done = 0
@@ -158,7 +159,7 @@ def main():
             crops=len(collected), by_split=dict(Counter(r['split'] for r in collected)),
             by_method=dict(Counter(r['method'] for r in collected)),
             errors=errors, undetected_frames=misses,
-            manifest=manifest.relative_to(ROOT).as_posix(),
+            manifest=str(manifest),
             validation='sequential frame traversal + sampled image decoding; source-video IDs disjoint, not a biometric identity audit')
         temp = report_path.with_suffix('.tmp')
         temp.write_text(json.dumps(value, indent=2), encoding='utf-8')

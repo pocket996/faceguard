@@ -1,4 +1,5 @@
 """Create a new manifest by conservatively quarantining cross-split similarity groups."""
+from project_io import resolve_data_path, data_location
 import argparse
 from collections import Counter, defaultdict
 import csv
@@ -39,9 +40,9 @@ def write(path, rows, fields):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--manifest', type=Path, required=True)
-    parser.add_argument('--candidates', type=Path, required=True)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--manifest', type=resolve_data_path, required=True)
+    parser.add_argument('--candidates', type=resolve_data_path, required=True)
+    parser.add_argument('--output', type=resolve_data_path, required=True)
     args = parser.parse_args()
     with args.manifest.open(encoding='utf-8-sig', newline='') as stream:
         rows = list(csv.DictReader(stream))

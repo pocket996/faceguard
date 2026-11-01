@@ -1,4 +1,5 @@
 """Create source-auditable, identity-grouped real/FLUX splits; reserve SD3.5."""
+from project_io import resolve_data_path, data_location
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 import csv
@@ -21,11 +22,10 @@ from media_faces import crop_face
 from generation_common import encode_canonical
 
 LOCAL = threading.local()
-DATA = HERE / 'data'
 
 
 def unpack_real():
-    folder = DATA / 'raw/lfw'
+    folder = data_location('lfw')
     with tarfile.open(folder / 'lfw-funneled.tgz', 'r:gz') as archive:
         for member in archive:
             if not member.isfile() or not member.name.lower().endswith('.jpg'):
@@ -37,9 +37,9 @@ def unpack_real():
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with archive.extractfile(member) as source:
                     path.write_bytes(source.read())
-    image_folder = DATA / 'raw/ffhq256/images'
+    image_folder = data_location('ffhq256') / 'images'
     image_folder.mkdir(parents=True, exist_ok=True)
-    for shard in sorted((DATA / 'raw/ffhq256').glob('*.parquet')):
+    for shard in sorted(data_location('ffhq256').glob('*.parquet')):
         index = 0
         for batch in pq.ParquetFile(shard).iter_batches(batch_size=64, columns=['image']):
             for row in batch.to_pylist():
@@ -52,14 +52,14 @@ def unpack_real():
 
 
 def jobs():
-    for path in sorted((DATA / 'raw/lfw/lfw_funneled').glob('*/*.jpg')):
+    for path in sorted((data_location('lfw') / 'lfw_funneled').glob('*/*.jpg')):
         yield dict(source='LFW', method='real', label=0, raw_path=str(path),
                    group='lfw:' + path.parent.name, sample_id='lfw_' + path.stem)
-    for path in sorted((DATA / 'raw/ffhq256/images').glob('*.png')):
+    for path in sorted((data_location('ffhq256') / 'images').glob('*.png')):
         yield dict(source='FFHQ-256-mirror', method='real', label=0, raw_path=str(path),
                    group='ffhq:' + path.stem, sample_id='ffhq_' + path.stem)
     for method, filename in [('FLUX', 'flux-seed.zip'), ('SD35', 'sd35-seed.zip')]:
-        archive = PROJECT / 'data/raw/fairfacegen' / filename
+        archive = resolve_data_path(PROJECT / 'data/raw/fairfacegen' / filename)
         with zipfile.ZipFile(archive) as stream:
             for name in sorted(stream.namelist()):
                 if not name.endswith('.jpg'):
@@ -72,7 +72,7 @@ def jobs():
 
 def process(job):
     if not hasattr(LOCAL, 'detector'):
-        LOCAL.detector = cv2.FaceDetectorYN.create(str(HERE / 'weights/face_detection_yunet_2023mar.onnx'), '', (320, 320), 0.8, 0.3, 5000)
+        LOCAL.detector = cv2.FaceDetectorYN.create(str(resolve_data_path(HERE / 'weights/face_detection_yunet_2023mar.onnx')), '', (320, 320), 0.8, 0.3, 5000)
         LOCAL.archives = {}
     try:
         if job.get('archive_member'):
@@ -88,12 +88,12 @@ def process(job):
         if face is None:
             return None, dict(sample_id=job['sample_id'], reason='no_face', source=job['source'])
         encoded = encode_canonical(face)
-        path = DATA / 'processed/generation128' / job['method'] / (job['sample_id'] + '.jpg')
+        path = data_location('generation_faces') / job['method'] / (job['sample_id'] + '.jpg')
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(encoded)
         with Image.open(io.BytesIO(encoded)) as decoded:
             pixel_hash = hashlib.sha256(decoded.convert('RGB').tobytes()).hexdigest()
-        return dict(job, path=path.relative_to(HERE).as_posix(), raw_width=raw_size[0],
+        return dict(job, path=str(path), raw_width=raw_size[0],
                     raw_height=raw_size[1], pixel_sha256=pixel_hash), None
     except Exception as error:
         return None, dict(sample_id=job['sample_id'], reason=str(error), source=job['source'])
@@ -118,7 +118,7 @@ def main():
                 errors.append(error)
             if index % 1000 == 0 or index == len(tasks):
                 progress = dict(stage='crop', done=index, total=len(tasks), accepted=len(rows), rejected=len(errors), seconds=time.monotonic() - start)
-                save_json(HERE / 'artifacts/generation_preparation_progress.json', progress)
+                save_json(resolve_data_path(HERE / 'artifacts/generation_preparation_progress.json'), progress)
                 print(json.dumps(progress), flush=True)
     # Quarantine ALL exact duplicate connected source groups across datasets/identities.
     # Do not let selecting a representative move a held-out generator into training.
@@ -138,7 +138,7 @@ def main():
         row['split'] = 'heldout_generator' if row['method'] == 'SD35' else group_split(row['group'])
         clean.append(row)
     fields = sorted(set().union(*(row.keys() for row in clean)))
-    manifest = DATA / 'generation_manifest.csv'
+    manifest = data_location('generation_manifest')
     with manifest.open('w', newline='', encoding='utf-8') as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
@@ -152,7 +152,7 @@ def main():
         identity_limitations='FFHQ mirror has no identity metadata; no biometric identity or near-duplicate audit; cross-dataset identities may overlap',
         license_limitations='FairFaceGen and mirror cards do not state full applicable image terms; no redistribution or commercial clearance established',
         external_user_image_in_training=False, seconds=time.monotonic() - start)
-    save_json(HERE / 'artifacts/generation_data_audit.json', report)
+    save_json(resolve_data_path(HERE / 'artifacts/generation_data_audit.json'), report)
     print(json.dumps({k: v for k, v in report.items() if k != 'rejected'}, ensure_ascii=False, indent=2), flush=True)
 
 

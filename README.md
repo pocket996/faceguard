@@ -1,5 +1,55 @@
 # 慧眼辨伪 · FaceGuard
 
+## 正式项目：谛听 · 青玉守真
+
+本机数据统一入口为 **`D:\datasets\faceguard`**：原始素材、裁脸、清单、评测包、来源凭据与待核验数据分层保存。进入该目录先看 `README.md` 和 `DATA_CATALOG.csv`；旧数据文件夹和兼容链接已清理；历史清单通过代码中的路径映射读取。完整位置与维护规则见 [数据准备](docs/data-setup.md)。
+
+从 2026-10-29 起，正式桌面应用以根目录 **`run_app.cmd` / `run_app.py`** 为入口，源码位于 **`src/faceguard/`**。界面沿用上次确定的第二版“谛听”：暖玉白、青玉与古金，左侧媒体、中央角色、右侧独立结果；可收起为透明桌宠。`reference_run` 保留为参考与实验实现。2026-10-31 已将稳定推理迁入 `src/faceguard/inference/`，权重复制到 `weights/runtime/`；正式程序运行不依赖参考目录。
+
+```powershell
+# 在仓库根目录安装一次界面依赖，然后启动
+.\.venv\Scripts\python.exe -m pip install -r requirements-ui.txt
+.\.venv\Scripts\python.exe run_app.py
+# 也可双击 run_app.cmd；直接启动桌宠使用 run_app.py --pet
+```
+
+**正式项目已接入原稳定双模型，支持照片双项检测、视频篡改采样、取消、逐脸 / 帧查看与报告。** 已提供本机照片 / 视频导入、预览、照片放大、透明桌宠、位置记忆、置顶和减少动效设置。工作台与桌宠使用原效果图同源的透明素材，通过同一张纹理的 **2.5D 连续网格形变**呈现轻呼吸、尾摆、点头与侧倾。另可在 **设置 → 查看角色立体预览** 打开保留同一形象的真实 3D 谛听，播放呼吸 / 摆尾、眨眼、明显点头和转头倾听；支持暂停 / 继续、拖动 / 滚轮旋转及恢复朝向。减少动态效果时保持静止。当前为 20 骨骼的坐姿表演原型，切换动作先平滑回正；完整面部表演、四足行走与跨窗口移动仍待完成，未达到动画电影成品质量。资产和制作说明随源码保存于 `src/faceguard/ui/assets/`。
+
+点击“开始检测”后在后台加载并校验模型；照片分别输出整脸生成和面部篡改结果，视频分别显示原 16 帧整段基线和有采样上限的片段复核。结果页可选择人脸、查看视频采样帧与人脸放大图，保存 JSON / 文本报告。多脸不混成一个真假概率，普通照片的篡改结果仍受视频帧模型适用范围限制。真实热力图算法尚待实现，叠加区明确显示等待。
+
+本机资源已准备。其他电脑先按 [环境说明](docs/TEAM_ENV_SETUP.md) 安装 PyTorch / OpenCV 等推理依赖，再复制核验过的完整 `weights/runtime/`（含 manifest），不需要训练数据。若本机已有完整旧参考资源，可在根目录执行一次：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/migrate_reference_models.py
+# 纯命令行检测；输出目录自行选择
+.\.venv\Scripts\python.exe scripts/predict_official.py "D:\your-photo.jpg" --output outputs/prediction.json
+```
+
+运行资源为 `generation.pt`、`manipulation.pt`、`yunet.onnx`、`video_policy.json`、`YuNet-LICENSE.txt` 和 `manifest.json`，全部位于被忽略的 `weights/runtime/`。脚本只复制稳定权重并检查哈希与预处理，不自动启用实验候选；旧权重和参考源码保留。模型详情见 [模型说明](docs/MODEL_CARD.md#official-20261031)。
+
+**训练完成不等于应用已切换模型。** 正式界面现可在“设置 → 整脸生成模型”选择本机安装的候选，默认仍为稳定版；下方显示当前选择，结果与历史报告记录实际版本和权重哈希。切换后需重新检测，旧模型缓存和当前结果会清除，历史记录保留。候选独立存放在 `weights/generation-candidates/`（连同其 manifest 一起复制到其他电脑）；不会覆盖稳定资源。SD1.5 候选明显改善 DFF，但不能由此推断 GPT 或 StyleGAN 也能识别；未检出不等于真实。
+
+```powershell
+# 显式用已安装的 SD1.5 候选；不修改默认稳定模型
+.\.venv\Scripts\python.exe scripts/predict_official.py "D:\your-photo.jpg" --task generation --generation-model dff-sd15-v1 --output outputs/candidate-prediction.json
+# 联合实验版更敏感、误报更多，仅用于明确选择的实验对照
+.\.venv\Scripts\python.exe scripts/predict_official.py "D:\your-photo.jpg" --task generation --generation-model gpt-sd15-v1 --output outputs/joint-prediction.json
+# 验证整体误报目标约 2% 的标定版；仍可能漏检，不改变默认模型
+.\.venv\Scripts\python.exe scripts/predict_official.py "D:\your-photo.jpg" --task generation --generation-model gpt-low-fpr-v1 --device cpu --output outputs/low-fpr-prediction.json
+# 11 月 1 日完整训练后由验证选出的第 2 轮，仍为明确选择的实验版
+.\.venv\Scripts\python.exe scripts/predict_official.py "D:\your-photo.jpg" --task generation --generation-model gpt-low-fpr-20261101 --device cpu --output outputs/low-fpr-trained-prediction.json
+```
+
+**2026-11-01 已完成此前中断的完整 3 轮低误报训练。** 验证选出第 2 轮，历史测试真图误报约 2.25%，用户 GPT 老人肖像现提示疑似生成；跨版本生成脸仍仅检出 31/158，不能视为 GPT 泛化问题解决。正式应用重启后，在“设置 → 整脸生成模型”选“GPT联合 · 低误报训练版（11-01）”；默认仍为稳定版，原候选保留。结果与复现见 [完整低误报训练](reference_run/README.md#full-low-fpr-20261101)。
+
+本机“GPT联合 · 低误报实验版”与高敏感联合版使用相同权重，只调整验证集标定阈值。验证整体误报约 2%，历史测试约 2.34%，用户 GPT 老人肖像在此阈值下仍漏检；这是检出 / 误报取舍，尚未解决 GPT 泛化。现有数据审计与 3,000 张真图训练复用清单见 [低误报与素材审计](docs/EXPERIMENTS.md#current-data-low-fpr-20261031)。
+
+右上角“历史”与“设置”相邻，支持按名称搜索、照片 / 视频筛选、重新打开、删除与清空。历史元数据保存于系统应用数据目录的 `history.sqlite3`，包含本机路径、名称、媒体类型、大小、北京时间与真实检测结果；不复制原始媒体。导入记录标记“待检测”，完成 / 部分完成 / 取消 / 失败分别保存状态；重新打开可恢复结果且不重复写入，文件大小或修改时间改变后需重新检测，原文件移动 / 删除后会提示无法打开。选脸预览临时裁图在正常退出时清理。桌宠与工作台复用同一角色，展开 / 收起采用柔和淡出淡入，减少动效时立即切换；支持悬停回应与双击切换。结果页并排图同步缩放、拖动并可复位。快捷键见队友说明。骨骼角色当前在立体预览播放，替换主工作台 / 桌宠动效、行走与跨窗口移动仍待实现。
+
+操作与验收见 [队友使用说明](docs/TEAM_QUICKSTART.md)。下文保留的 **v0.1.0 发布包和 `reference_run` 检测流程属于已有参考项目**，与正式应用的源码入口分开。
+
+---
+
 **一个在本机分析人脸照片和视频，提示 AI 整脸生成、换脸及面部篡改风险的检测研究原型。**
 
 选择照片或视频 → 程序检测并裁出人脸 → 模型分析 → 查看检测提示与分数，保存中文报告。项目同时提供 Windows 桌面程序、命令行工具，以及从数据整理到训练、评估的实验源码，供日常体验、团队演示和研究复现使用。
@@ -157,8 +207,10 @@ reference_run/
 ## 目录导航
 
 ```text
-reference_run/   检测界面、命令行、训练、评估和打包的主要实现
-src/faceguard/  基础数据加载模块
+run_app.cmd     正式应用双击启动入口
+run_app.py      正式应用 Python 入口
+src/faceguard/  正式应用、QML 界面、同源角色动效、历史记录与基础数据模块
+reference_run/   保留的参考界面、命令行、训练、评估和打包实现
 scripts/        环境检查、数据下载、FF++ 清单与抽帧裁脸
 tests/          数据、推理、训练协议、视频采样与审计检查
 docs/           使用说明、模型卡、复现步骤、实验报告与限制

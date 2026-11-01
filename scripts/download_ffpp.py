@@ -18,6 +18,8 @@ import urllib.request
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'src'))
+from faceguard.data_locations import data_location, ffpp_receipt_key
 METHODS = ('original', 'Deepfakes', 'Face2Face', 'FaceSwap', 'NeuralTextures')
 
 
@@ -50,7 +52,7 @@ def main():
     official = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(official)
     previous_argv = sys.argv
-    sys.argv = ['download', str(ROOT / 'data/raw/ffpp'), '--server', 'EU2', '-c', 'c23']
+    sys.argv = ['download', str(data_location('ffpp')), '--server', 'EU2', '-c', 'c23']
     try:
         config = official.parse_args()
     finally:
@@ -60,8 +62,8 @@ def main():
     if not pairs or not all(len(p) == 2 and all(re.fullmatch(r'\d{3}', i) for i in p)
                             for p in pairs):
         raise ValueError('Unexpected official file list')
-    save_json(ROOT / 'data/manifests/ffpp-official-pairs.json', pairs)
-    receipt_path = ROOT / 'data/manifests/ffpp-download-receipts.json'
+    save_json(data_location('ffpp_manifests') / 'ffpp-official-pairs.json', pairs)
+    receipt_path = data_location('ffpp_manifests') / 'ffpp-download-receipts.json'
     receipts = json.loads(receipt_path.read_text(encoding='utf-8')) if receipt_path.exists() else {}
     tasks = []
     for method in METHODS:
@@ -72,7 +74,7 @@ def main():
             names = names[:args.limit_per_method]
         for name in names:
             relative = official.DATASETS[method] + '/c23/videos/' + name + '.mp4'
-            path = ROOT / 'data/raw/ffpp' / relative
+            path = data_location('ffpp') / relative
             tasks.append((method, path, config.base_url + relative))
     status_path = ROOT / 'outputs/ffpp-download-status.json'
     status = {'state': 'running', 'scope': 'standard FF++ original + four methods, c23',
@@ -86,7 +88,7 @@ def main():
 
     def download(task):
         method, path, url = task
-        key = path.relative_to(ROOT).as_posix()
+        key = ffpp_receipt_key(path)
         old = receipts.get(key)
         if old and path.is_file() and path.stat().st_size == old['bytes']:
             if digest(path) == old['sha256']:
@@ -132,7 +134,7 @@ def main():
                 status['completed'] += 1
                 status['bytes'] += receipt['bytes']
             except Exception as exc:
-                status['failed'].append({'path': task[1].relative_to(ROOT).as_posix(),
+                status['failed'].append({'path': str(task[1]),
                                          'error': str(exc)})
             update()
             if (status['completed'] + len(status['failed'])) % 25 == 0:

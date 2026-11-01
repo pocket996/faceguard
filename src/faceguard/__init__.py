@@ -1,1 +1,1 @@
-"""Data preparation for AI face generation and manipulation detection."""
+"""FaceGuard official desktop application and face-detection data tools."""

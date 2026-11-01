@@ -12,3 +12,9 @@
 ## 文档维护
 
 - 优先更新已有主题文档；实验结论集中到 docs/EXPERIMENTS.md，训练步骤集中到 reference_run/README.md。不要为每次会话另建摘要或重复入口。详细自动报告写入被忽略的 artifacts / outputs 目录。
+
+## 数据存放
+
+- 项目采集素材统一放在 `D:\datasets\faceguard`，按根目录 README / DATA_CATALOG 的层级存放并更新同一总表。
+- 用户已要求删除旧数据文件夹；不要重建仓库 `data`、`reference_run/data`、`D:\datasets\dff` / `gan140k` 或旧实验数据兼容链接。
+- 新代码使用 `faceguard.data_locations.data_location`；历史清单通过 `resolve_data_path` 在代码中映射，保留冻结 CSV、标签、split 和模型哈希。路径文字映射不需要在磁盘创建旧入口。

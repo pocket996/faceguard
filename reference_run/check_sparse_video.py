@@ -1,4 +1,5 @@
 """Controlled short-splice regression clips: same re-encoding for real controls and altered clips."""
+from project_io import resolve_data_path, data_location
 import argparse
 from collections import defaultdict
 import csv
@@ -15,7 +16,7 @@ from project_io import HERE,PROJECT,digest,save_json
 def prepare(output):
     protocol_path=output/'PROTOCOL.json'
     if protocol_path.is_file():return json.loads(protocol_path.read_text(encoding='utf-8'))
-    with (PROJECT/'data/manifests/ffpp-frames-full-93e2b370610e.csv').open(encoding='utf-8-sig',newline='') as stream:
+    with (resolve_data_path(PROJECT/'data/manifests/ffpp-frames-full-93e2b370610e.csv')).open(encoding='utf-8-sig',newline='') as stream:
         rows=[r for r in csv.DictReader(stream) if r['split']=='test']
     originals={r['target_id']:r['source_video'] for r in rows if r['label']=='0'}
     unique={r['parent_video_id']:r for r in rows if r['label']=='1'}
@@ -27,12 +28,12 @@ def prepare(output):
         selected+=group[:2]
     clips=[];excluded=[];cv2.setNumThreads(1)
     for row in selected:
-        fake_path=PROJECT/row['source_video']
+        fake_path=resolve_data_path(PROJECT/row['source_video'])
         # FF++ method naming alone does not establish which original supplies the visible scene.
         # Choose only a geometrically matching original whose pixels align, before any model scores.
         matches=[]
         for original_id in (row['target_id'],row['source_id']):
-            candidate=PROJECT/originals[original_id]
+            candidate=resolve_data_path(PROJECT/originals[original_id])
             a=cv2.VideoCapture(str(candidate));b=cv2.VideoCapture(str(fake_path));errors=[]
             for index in (0,12,24):
                 a.set(cv2.CAP_PROP_POS_FRAMES,index);b.set(cv2.CAP_PROP_POS_FRAMES,index)
@@ -85,7 +86,7 @@ def prepare(output):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--output',type=resolve_data_path,required=True)
     parser.add_argument('--prepare-only',action='store_true')
     args=parser.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     protocol=prepare(args.output)

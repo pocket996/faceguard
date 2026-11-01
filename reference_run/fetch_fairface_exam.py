@@ -1,4 +1,5 @@
 """One hash-pinned FairFace mirror shard; deterministic held-out real-face exam only."""
+from project_io import resolve_data_path, data_location
 import argparse
 import csv
 import hashlib
@@ -27,9 +28,9 @@ SHA256='ce47863c011f355ef7ab63d70420d9d4b36fce03cf1621a26597955da21968bb'
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output',type=Path,required=True)
-    parser.add_argument('--old-hashes',type=Path,required=True)
-    parser.add_argument('--new-manifest',type=Path,required=True)
+    parser.add_argument('--output',type=resolve_data_path,required=True)
+    parser.add_argument('--old-hashes',type=resolve_data_path,required=True)
+    parser.add_argument('--new-manifest',type=resolve_data_path,required=True)
     parser.add_argument('--count',type=int,default=1000)
     args=parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=True);(args.output/'crops').mkdir(exist_ok=True)
@@ -54,7 +55,7 @@ def main():
     if digest(shard)!=SHA256:
         raise ValueError('LFS checksum mismatch')
     cv2.setNumThreads(1)
-    detector=cv2.FaceDetectorYN.create(str(HERE/'weights/face_detection_yunet_2023mar.onnx'),'',(320,320),.8,.3,5000)
+    detector=cv2.FaceDetectorYN.create(str(resolve_data_path(HERE/'weights/face_detection_yunet_2023mar.onnx')),'',(320,320),.8,.3,5000)
     parquet=pq.ParquetFile(shard)
     indices=sorted(range(parquet.metadata.num_rows),key=lambda i:hashlib.sha256(('fairface-exam-v1:'+str(i)).encode()).hexdigest())[:args.count]
     selected=set(indices);rows=[];rejected=[];index=0
@@ -84,7 +85,7 @@ def main():
     old_hashes=[int(v,16) for v in json.loads(args.old_hashes.read_text()).values()]
     with args.new_manifest.open(encoding='utf-8-sig',newline='') as stream:
         new=list(csv.DictReader(stream))
-    previous=old_hashes+[perceptual_hash(HERE/r['path']) for r in new]
+    previous=old_hashes+[perceptual_hash(resolve_data_path(HERE/r['path'])) for r in new]
     border=len(previous);values=previous+[perceptual_hash(r['path']) for r in rows];dropped=set()
     for a,b,distance in near_pairs(values,6):
         if b<border:continue

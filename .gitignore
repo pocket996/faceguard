@@ -3,7 +3,11 @@ __pycache__/
 data/
 weights/
 outputs/
+artifacts/
+.vscode/
 *.pyc
 tools/download-FaceForensics.py
 scripts/run_morning_*.ps1
 scripts/run_project_python.ps1
+src/faceguard/ui/assets/**/import.log
+src/faceguard/ui/assets/**/import-report.json

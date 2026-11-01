@@ -221,7 +221,8 @@ class FaceGuardApp:
     def select_path(self, path, example=''):
         if self.busy:
             return
-        path = Path(path)
+        from project_io import resolve_data_path
+        path = resolve_data_path(path)
         if not path.is_file() or path.suffix.lower() not in PHOTOS + VIDEOS:
             messagebox.showerror('无法选择此文件', '请选择存在的照片或视频，例如 JPG、PNG、MP4 或 MOV。', parent=self.root)
             return

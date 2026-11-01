@@ -7,13 +7,14 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 from faceguard.data import BASE_FIELDS, validate_manifest, write_manifest
+from faceguard.data_locations import data_location
 
 
 def main():
-    receipts = json.loads((ROOT / 'data/manifests/ffpp-download-receipts.json').read_text())
+    receipts = json.loads((data_location('ffpp_manifests') / 'ffpp-download-receipts.json').read_text())
     groups, assignments, partners = {}, {}, {}
     for split in ('train', 'val', 'test'):
-        pairs = json.loads((ROOT / f'data/manifests/ffpp-splits/{split}.json').read_text())
+        pairs = json.loads((data_location('ffpp_manifests') / 'ffpp-splits' / f'{split}.json').read_text())
         for pair in pairs:
             group = 'ffpp:' + '_'.join(sorted(pair))
             for video_id in pair:
@@ -34,9 +35,10 @@ def main():
                 video_id + '_' + partners[video_id]]
             for name in names:
                 parts = name.split('_')
-                path = f'data/raw/ffpp/{folder}/c23/videos/{name}.mp4'
+                legacy_key = f'data/raw/ffpp/{folder}/c23/videos/{name}.mp4'
+                path = str(data_location('ffpp') / folder / f'c23/videos/{name}.mp4')
                 expected_paths.add(path)
-                receipt = receipts.get(path)
+                receipt = receipts.get(legacy_key)
                 if not receipt or not (ROOT / path).is_file():
                     raise ValueError(f'Missing official video or receipt: {path}')
                 if (ROOT / path).stat().st_size != receipt['bytes']:
@@ -48,13 +50,13 @@ def main():
                     source_id=parts[1] if len(parts) > 1 else '',
                     group_id=groups[video_id], split=assignments[video_id],
                     media_type='video', provenance_status='verified'))
-    actual_paths = {p.relative_to(ROOT).as_posix()
+    actual_paths = {str(p)
                     for folder in folders.values()
-                    for p in (ROOT / 'data/raw/ffpp' / folder / 'c23/videos').glob('*.mp4')}
+                    for p in (data_location('ffpp') / folder / 'c23/videos').glob('*.mp4')}
     if actual_paths != expected_paths:
         raise ValueError('Official directory contains missing or unexpected videos')
     validate_manifest(rows)
-    write_manifest(ROOT / 'data/manifests/ffpp-videos.csv', rows, BASE_FIELDS)
+    write_manifest(data_location('ffpp_manifests') / 'ffpp-videos.csv', rows, BASE_FIELDS)
     report = {'videos': len(rows), 'groups': len(set(groups.values())),
               'by_split': dict(Counter(r['split'] for r in rows)),
               'by_method': dict(Counter(r['method'] for r in rows)),

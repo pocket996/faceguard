@@ -1,4 +1,5 @@
 """Canonical largest-face research crops, prompt grouping, and cross-source similarity quarantine."""
+from project_io import resolve_data_path, data_location
 import argparse
 from collections import Counter
 import csv
@@ -27,16 +28,16 @@ def write_rows(path, rows):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--subset', type=Path, required=True)
-    parser.add_argument('--clean-manifest', type=Path, required=True)
-    parser.add_argument('--old-hashes', type=Path, required=True)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--subset', type=resolve_data_path, required=True)
+    parser.add_argument('--clean-manifest', type=resolve_data_path, required=True)
+    parser.add_argument('--old-hashes', type=resolve_data_path, required=True)
+    parser.add_argument('--output', type=resolve_data_path, required=True)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     output_images = args.output / 'crops'
     output_images.mkdir(exist_ok=True)
     cv2.setNumThreads(1)
-    detector = cv2.FaceDetectorYN.create(str(HERE/'weights/face_detection_yunet_2023mar.onnx'), '', (320,320), .8, .3, 5000)
+    detector = cv2.FaceDetectorYN.create(str(resolve_data_path(HERE/'weights/face_detection_yunet_2023mar.onnx')), '', (320,320), .8, .3, 5000)
     receipts_path = args.subset / 'receipts.json'
     receipts = json.loads(receipts_path.read_text(encoding='utf-8'))
     with args.clean_manifest.open(encoding='utf-8-sig', newline='') as stream:
@@ -44,7 +45,7 @@ def main():
     rows, rejected = [], []
     for index, item in enumerate(receipts):
         try:
-            raw_path = Path(item['path'])
+            raw_path = resolve_data_path(item['path'])
             if digest(raw_path) != item['downloaded_sha256']:
                 raise ValueError('Downloaded image checksum changed')
             with Image.open(raw_path) as source:

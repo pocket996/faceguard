@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image
 import torch
 from torch.utils.data import Dataset
+from .data_locations import resolve_data_path
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,12 +19,12 @@ FRAME_FIELDS = BASE_FIELDS + ['parent_video_id', 'source_video', 'frame_index',
 
 
 def read_manifest(path):
-    with Path(path).open(newline='', encoding='utf-8-sig') as stream:
+    with resolve_data_path(path).open(newline='', encoding='utf-8-sig') as stream:
         return list(csv.DictReader(stream))
 
 
 def write_manifest(path, rows, fields):
-    path = Path(path)
+    path = resolve_data_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(path.suffix + '.tmp')
     with temp.open('w', newline='', encoding='utf-8') as stream:
@@ -88,9 +89,7 @@ class FaceImageDataset(Dataset):
 
     def __getitem__(self, index):
         row = self.rows[index]
-        path = Path(row['path'])
-        if not path.is_absolute():
-            path = self.root / path
+        path = resolve_data_path(row['path'], self.root)
         with Image.open(path) as image:
             image = image.convert('RGB')
             if self.transform:

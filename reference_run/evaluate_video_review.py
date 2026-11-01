@@ -1,4 +1,5 @@
 """Measure adaptive review on a fixed source-grouped subset; reuse only validation for calibration."""
+from project_io import resolve_data_path, data_location
 import argparse
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -19,7 +20,7 @@ from video_analysis import temporal_alert_score
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--split', choices=['val', 'test'], required=True)
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--output', type=resolve_data_path, required=True)
     parser.add_argument('--fake-per-method', type=int, default=35)
     parser.add_argument('--workers', type=int, default=2)
     parser.add_argument('--device', choices=['cpu', 'cuda'], default='cuda')
@@ -28,7 +29,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     torch.set_num_threads(2)
     cv2.setNumThreads(1)
-    manifest = PROJECT / 'data/manifests/ffpp-frames-full-93e2b370610e.csv'
+    manifest = resolve_data_path(PROJECT / 'data/manifests/ffpp-frames-full-93e2b370610e.csv')
     with manifest.open(encoding='utf-8-sig', newline='') as stream:
         rows = list(csv.DictReader(stream))
     by_method, unique = defaultdict(list), {}
@@ -42,7 +43,7 @@ def main():
         group.sort(key=lambda r: hashlib.sha256(('video-review-v1:' + r['parent_video_id']).encode()).hexdigest())
         selected.extend(group if group[0]['label'] == '0' else group[:args.fake_per_method])
     protocol = dict(split=args.split, videos=len(selected), video_ids=[r['parent_video_id'] for r in selected],
-        manifest_sha256=digest(manifest), model_sha256=digest(HERE / 'artifacts/model_finetuned.pt'),
+        manifest_sha256=digest(manifest), model_sha256=digest(resolve_data_path(HERE / 'artifacts/model_finetuned.pt')),
         selection='All real videos + first fixed-hash 35 per fake method (unless overridden); source group split retained',
         aggregation='Maximum pair mean within one spatial IoU track and 1.5s; not a learned temporal model',
         calibration='Use validation real videos only to pick false-alert operating point; never test')
@@ -57,7 +58,7 @@ def main():
         if not hasattr(local, 'predictor'):
             local.predictor = Predictor(device=args.device)
         t0 = time.monotonic()
-        result = local.predictor.predict(PROJECT / row['source_video'], adaptive_video=True)
+        result = local.predictor.predict(resolve_data_path(PROJECT / row['source_video']), adaptive_video=True)
         result.update(video_id=row['parent_video_id'], known_label=int(row['label']), method=row['method'],
                       source_group=row['group_id'], split=args.split, seconds_elapsed=time.monotonic()-t0,
                       model_sha256=protocol['model_sha256'])

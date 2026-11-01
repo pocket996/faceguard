@@ -39,7 +39,8 @@ def main():
         face=crop_face(cv2.cvtColor(np.asarray(image),cv2.COLOR_RGB2BGR),analyzer.generation.detector)
         if face is not None:
             pixels=hashlib.sha256(canonical_face(face).tobytes()).hexdigest()
-            with (base/'openfake-prepared/combined_manifest.csv').open(encoding='utf-8-sig',newline='') as stream:
+            from project_io import resolve_data_path
+            with resolve_data_path(base/'openfake-prepared/combined_manifest.csv').open(encoding='utf-8-sig',newline='') as stream:
                 training_pixels={r['pixel_sha256'] for r in csv.DictReader(stream) if r['split'] in ('train','val')}
             assert pixels not in training_pixels,'Known user regression overlaps fitting data'
         assert checksum==digest(args.user_image),'Input file changed'

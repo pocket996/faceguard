@@ -1,4 +1,5 @@
 """Download scikit-learn's hash-pinned LFW archive into the isolated experiment."""
+from project_io import resolve_data_path, data_location
 import hashlib
 from pathlib import Path
 import time
@@ -11,7 +12,7 @@ SHA256 = 'b47c8422c8cded889dc5a13418c4bc2abbda121092b3533a83306f90d900100a'
 
 
 def main():
-    folder = HERE / 'data/raw/lfw'
+    folder = resolve_data_path(HERE / 'data/raw/lfw')
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / 'lfw-funneled.tgz'
     if target.exists() and hashlib.sha256(target.read_bytes()).hexdigest() == SHA256:

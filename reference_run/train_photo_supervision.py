@@ -1,4 +1,5 @@
 """Photo-specific manipulation candidate with controlled local-edit proxy supervision."""
+from project_io import resolve_data_path, data_location
 import argparse
 from collections import Counter,defaultdict
 import csv
@@ -32,8 +33,8 @@ def score(network,rows,args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--photos',type=Path,required=True)
-    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--photos',type=resolve_data_path,required=True)
+    parser.add_argument('--output',type=resolve_data_path,required=True)
     parser.add_argument('--epochs',type=int,default=4)
     parser.add_argument('--batch-size',type=int,default=48)
     parser.add_argument('--device',default='cuda')
@@ -45,7 +46,7 @@ def main():
     args.output.mkdir(parents=True,exist_ok=True)
     with args.photos.open(encoding='utf-8-sig',newline='') as stream:
         photos=list(csv.DictReader(stream))
-    ffpp_path=PROJECT/'data/manifests/ffpp-frames-full-93e2b370610e.csv'
+    ffpp_path=resolve_data_path(PROJECT/'data/manifests/ffpp-frames-full-93e2b370610e.csv')
     with ffpp_path.open(encoding='utf-8-sig',newline='') as stream:
         ffpp=list(csv.DictReader(stream))
     by_video=defaultdict(list)
@@ -59,7 +60,7 @@ def main():
         indices=np.linspace(0,len(group)-1,min(amount,len(group)),dtype=int)
         for i in indices:
             row=group[i]
-            common.append(dict(sample_id=row['sample_id'],path=str((PROJECT/row['path']).resolve()),
+            common.append(dict(sample_id=row['sample_id'],path=str((resolve_data_path(PROJECT/row['path'])).resolve()),
                 label=row['label'],split=row['split'],group=row['group_id'],source='FF++:'+row['method'],method=row['method'],
                 parent_image=row['sample_id']))
     common+=photos
@@ -85,7 +86,7 @@ def main():
         references=['https://arxiv.org/abs/2204.08376','https://arxiv.org/abs/1912.13458'],
         warning='Simplified original experiment inspired by paper concepts, NOT official SBI/Face X-Ray reproduction. Proxy maps are not ground truth for real deepfakes; no whole-face generation claim.'))
     network=LocalEditNetwork().to(args.device)
-    initial=torch.load(HERE/'artifacts/model_finetuned.pt',map_location='cpu',weights_only=True)
+    initial=torch.load(resolve_data_path(HERE/'artifacts/model_finetuned.pt'),map_location='cpu',weights_only=True)
     network.encoder.load_state_dict(initial['backbone']);network.head.load_state_dict(initial['head'])
     optimizer=torch.optim.AdamW([dict(params=network.encoder.parameters(),lr=1e-5),dict(params=network.head.parameters(),lr=1e-4),
                                  dict(params=network.mask_decoder.parameters(),lr=3e-4)],weight_decay=1e-4)
@@ -124,7 +125,7 @@ def main():
                 head={k:v.detach().cpu().clone() for k,v in network.head.state_dict().items()},
                 mask_decoder={k:v.detach().cpu().clone() for k,v in network.mask_decoder.state_dict().items()},
                 task='photo_manipulation_research',preprocessing='photo128_jpeg90',frame_threshold=threshold,video_threshold=threshold,
-                yunet_sha256=digest(HERE/'weights/face_detection_yunet_2023mar.onnx'),selected_epoch=epoch+1,
+                yunet_sha256=digest(resolve_data_path(HERE/'weights/face_detection_yunet_2023mar.onnx')),selected_epoch=epoch+1,
                 manifest_sha256=digest(args.output/'manifest.csv'),threshold_strategy='Source-balanced validation midpoint',
                 mask_weight=args.mask_weight,mask_scope='Controlled blending proxy only; not proof or true segmentation of real forgeries')
             torch.save(state,args.output/'model.pt')

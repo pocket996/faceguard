@@ -1,4 +1,5 @@
 """Separate generation/manipulation results, including each detected photo face."""
+from project_io import resolve_data_path, data_location
 from pathlib import Path
 import cv2
 import numpy as np
@@ -12,7 +13,7 @@ PHOTO_SUFFIXES = ('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff')
 
 
 def generation_directory():
-    base = HERE / 'artifacts/generation'
+    base = resolve_data_path(HERE / 'artifacts/generation')
     joint = base / 'joint'
     return joint if (joint / 'READY.json').is_file() and (joint / 'model.pt').is_file() else base
 
@@ -20,14 +21,14 @@ def generation_directory():
 class GenerationPredictor:
     def __init__(self, checkpoint=None, device=None):
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
-        path = Path(checkpoint) if checkpoint else generation_directory() / 'model.pt'
+        path = resolve_data_path(checkpoint) if checkpoint else generation_directory() / 'model.pt'
         if not path.is_file():
             raise FileNotFoundError('整脸生成模型尚未准备好，请先运行 train_generation.py。')
         self.model, self.head, self.state = load_detector(path, self.device)
         self.model_sha256=digest(path)
         if self.state.get('task') != 'whole_face_generation':
             raise ValueError('此权重不属于整脸生成模型')
-        weight = HERE / 'weights/face_detection_yunet_2023mar.onnx'
+        weight = resolve_data_path(HERE / 'weights/face_detection_yunet_2023mar.onnx')
         if digest(weight) != self.state['yunet_sha256']:
             raise ValueError('YuNet 权重与训练预处理不匹配')
         self.detector = cv2.FaceDetectorYN.create(str(weight), '', (320, 320), .8, .3, 5000)
@@ -35,7 +36,7 @@ class GenerationPredictor:
 
     @torch.inference_mode()
     def predict(self, path, face_crop=False, progress=None):
-        path = Path(path).resolve()
+        path = resolve_data_path(path).resolve()
         if path.suffix.lower() not in PHOTO_SUFFIXES:
             raise ValueError('整脸生成检测目前支持照片；视频请使用换脸/篡改检测。')
         if progress:
@@ -80,7 +81,7 @@ class FaceAnalyzer:
         self.photo_manipulation = None
 
     def predict(self, path, face_crop=False, progress=None, task='auto', video_sampling='adaptive'):
-        is_photo = Path(path).suffix.lower() in PHOTO_SUFFIXES
+        is_photo = resolve_data_path(path).suffix.lower() in PHOTO_SUFFIXES
         if task == 'auto':
             task = 'both' if is_photo else 'manipulation'
         if task == 'both':
@@ -96,7 +97,7 @@ class FaceAnalyzer:
             if not results:
                 raise ValueError('两项检测均未完成：' + str(errors))
             reference = next(iter(results.values()))
-            return dict(path=str(Path(path).resolve()), media_type='image', task='photo_dual', score=None,
+            return dict(path=str(resolve_data_path(path).resolve()), media_type='image', task='photo_dual', score=None,
                         decision='partial_results' if errors else ('no_face' if all(r['decision'] == 'no_face' for r in results.values()) else 'separate_results'),
                         faces=reference['faces'], sampled_frames=1, no_face_frames=reference['no_face_frames'],
                         detected_faces=reference.get('detected_faces', reference['faces']),
@@ -137,7 +138,7 @@ class PhotoManipulationPredictor(Predictor):
         self.transform=(lambda image:base(canonical_face(image))) if self.state['preprocessing']=='photo128_jpeg90' else base
 
     def predict(self,path,face_crop=False,progress=None):
-        if Path(path).suffix.lower() not in PHOTO_SUFFIXES:
+        if resolve_data_path(path).suffix.lower() not in PHOTO_SUFFIXES:
             raise ValueError('照片实验模型不用于视频')
         result=super().predict(path,face_crop=face_crop,progress=progress)
         result.pop('photo_validation',None)
