@@ -90,10 +90,12 @@ Item {
         Text { text: "本机保存文件路径、导入信息与检测结果；原媒体不会复制到历史库。重新打开可查看记录，原文件改变后需重新检测。"; Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#7c8778"; font.pixelSize: 11 }
         Text { text: controller.errorText; visible: !!controller.errorText; Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#9c6335"; font.pixelSize: 12 }
     }
-    Dialog {
+    AppDialog {
         id: clearDialog
+        objectName: "clearHistoryDialog"
         parent: Overlay.overlay; anchors.centerIn: parent; width: 420; modal: true
         title: "清空全部历史记录？"
+        eyebrow: "历史管理 / HISTORY"; confirmText: "清空记录"
         standardButtons: Dialog.Cancel | Dialog.Ok
         onAccepted: controller.clearHistory()
         contentItem: Text { text: "仅清除本机历史信息，原始照片和视频不受影响。"; wrapMode: Text.Wrap; color: "#355349"; font.pixelSize: 13 }

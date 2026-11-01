@@ -1,5 +1,32 @@
 # 谛听角色展示资产
 
+## 工作台水墨庭院（2026-11-01）
+
+正式工作台由 `../InkCourtyard.qml` 组合水墨庭景远景图、Qt Quick 3D 实时三层石台、石纹材质与接触阴影。保留原谛听形象与检测时的俯耳动作；角色继续使用现有 2.5D，古建 / 远山为绘制的远景，不据此称完整古建筑三维建模或完整 3D 角色已完成。视差联动鼠标注视方向，减少动效时固定相机；进入结果 / 历史页或收为桌宠后卸载庭院，返回工作台重新加载。两侧操作区保留可读背景。
+
+两份素材均使用 **内置 imagegen** 生成，原输出保留在 Codex 的 generated_images 中，以下正式副本已经复制到项目，运行不依赖生成缓存、outputs 或外部 API。
+
+| 正式资源（相对本目录） | 尺寸 | 字节 | SHA-256 |
+| --- | --- | --- | --- |
+| `ink-courtyard-v1.png` | 1672 × 941 | 2,958,640 | `7de290870faf779e767eb0e58a828c91764a8cb7f217b50c1e1ee4c559f31f2f` |
+| `ink-courtyard-stone-v1.png` | 1254 × 1254 | 3,988,501 | `077fb7ae76c7b5c1c1ce2732be8101a34a7c30cb8b832b8dd5543112fabb47f3` |
+
+庭景最终提示词：
+
+```text
+Use case: historical-scene. Asset type: finished landscape background artwork for a Chinese desktop application's CENTRAL character stage, not a UI mockup. Create a wide 16:9 ancient Chinese ink-wash courtyard garden with a convincing sculptural, three-dimensional diorama sense of depth, as if soft ink painting were built into real stone, architecture and mist. Elegant Song-dynasty literati garden, misty layered limestone mountains in the distance, an understated timber pavilion and curved tiled eaves in the left middle distance, pale garden walls and a moon gate at the right rear, sparse dark pine and bamboo framing the outer edges, a few weathered rocks, soft shallow reflections. Muted warm rice-paper ivory, celadon grey-green, charcoal ink, tiny aged bronze accents; match warm ivory desktop UI. Viewpoint: slightly elevated frontal perspective, soft morning light and ambient occlusion, distant mountains very pale, foreground ink details crisp. COMPOSITION CRITICAL: leave the central 45 percent of the frame OPEN and calm for a separately rendered large mythical guardian character. In the bottom-center foreground leave an empty flat pale-grey stone courtyard surface for an actual 3D circular stone plinth added later in code. Architectural scenery should frame the character from behind, not fill the central empty space. Foreground dark bamboo leaf clusters only at outer lower corners. Topmost and side edges fade naturally into warm off-white mist, no hard rectangular frame. Landscape artwork fills image, no white margins, no text, no calligraphy, no seals, no logos, no people, no animals, no guardian, no modern objects, no user interface, no drawn pedestal in the central landing area. Painterly ink textures and spatial depth rather than a flat ornamental wallpaper; quiet, refined, readable silhouette space, not oversaturated fantasy.
+```
+
+石纹最终提示词：
+
+```text
+Use case: stylized-concept. Asset type: square seamless albedo/base-color texture for the top of a real 3D ancient Chinese courtyard stone terrace, not a scene or object rendering. Orthographic straight overhead texture ONLY, fills the entire square edge to edge. Weathered pale grey limestone with broad irregular stone slabs, thin subtle charcoal fissures, delicate ink-wash cloud mottling, tiny desaturated grey-green moss stains only along a few cracks. Refined Song-dynasty temple courtyard, centuries old but cared for. Neutral cool-warm limestone GREY and ivory, no yellow/gold/olive cast. Physically matte surface with nuanced stone granularity visible at small size, light and understated, antique Chinese ink painting sensibility. Even flat diffuse lighting, NO directional lighting or cast shadows, no perspective, no stone pedestal shape, no side edges, no border, no objects, no people, no text, no symbols, no watermarks. Seamless/tileable appearance, fine believable texture rather than cartoon.
+```
+
+验收入口 `scripts/check_courtyard_ui.py`：检查素材读取、真实 3D 石台、倾听、相机 / 像素视差、减少动效、小窗口、页面 / 桌宠切换后的卸载与恢复。截图及详细记录保存在被忽略的 `outputs/ink-courtyard-20261101/`，本机自动验收不代替其他机器或用户的外观确认。
+
+## 谛听角色素材与动态
+
 `diting-v2.png` 使用内置 imagegen，以 `outputs/ui-concepts/2026-10-28/diting/01-character.png` 和 `05-desktop-pet-v2.png` 为身份参考生成透明角色资产。原效果图保留不改。资产已随正式源码保存，不依赖本机 outputs 目录。
 
 本轮提示词：
@@ -9,6 +36,8 @@
 当前由 `DitingAvatar.qml` 及保留源码的 `shaders/diting.vert` / `diting.frag` 在同一张纹理上进行连续网格形变，实现呼吸、尾摆、点头和轻微侧倾。工作台 / 桌宠当前仍是同一张图的连续形变；设置中的立体预览已另接真实蒙皮角色，制作记录见下文第三至第五轮。完整精细角色仍在完善。
 
 2026-10-30：增加鼠标悬停时的小幅头部回应；减少动态效果时停用回应和连续形变，隐藏角色时暂停计时，重新显示后继续原动画相位。本轮未替换素材或新增 3D 模型。
+
+2026-11-01：移除工作台独立的动作预览按钮，`DitingAvatar.listening` 绑定实际后台检测状态；检测时平滑低头侧倾，局部网格压低竖耳，伴随呼吸与涟漪，结束 / 失败 / 取消完成后回正。减少动态效果时停止这些形变，但检测继续；当前仍为同源 2.5D 网格，不是新增完整骨骼动画。顶点源码及重新编译的 `.qsb` 同步保存。`../brand.svg` 重新设计为青玉底、古金独角与象牙白侧首的矢量徽记，窗口左上角、弹窗和托盘共用此文件，可在小尺寸清晰显示；该徽记为手工矢量绘制，不是角色模型或 imagegen 资产。
 
 ## Blender 静态形体小样（2026-10-30）
 

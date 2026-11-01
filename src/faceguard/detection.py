@@ -117,6 +117,31 @@ VERDICTS = {
 }
 
 
+def task_state(result, task):
+    """Presentation tone follows actual decisions, including multi-face alerts."""
+    if not result:
+        return 'idle'
+    if task in result.get('errors', {}):
+        return 'unavailable'
+    if result.get('media_type') == 'video':
+        if task == 'generation':
+            return 'unavailable'
+        item = result.get('legacy_baseline', result)
+        if result.get('temporal_review', {}).get('decision') == 'review_alerts':
+            return 'attention'
+    else:
+        item = result.get('results', {}).get(task)
+        if item is None:
+            expected = 'whole_face_generation' if task == 'generation' else 'face_manipulation'
+            item = result if result.get('task') == expected else {}
+    decision = item.get('decision', '')
+    if decision.startswith('suspected_') or any(f.get('decision', '').startswith('suspected_') for f in item.get('face_results', [])):
+        return 'attention'
+    if decision in {'no_generation_detected', 'no_manipulation_detected'}:
+        return 'clear'
+    return 'unavailable'
+
+
 def task_summary(result, task):
     if not result:
         return '等待检测'
@@ -126,6 +151,8 @@ def task_summary(result, task):
         if task == 'generation':
             return '视频暂不支持此项'
         item = result.get('legacy_baseline', result)
+        if result.get('temporal_review', {}).get('decision') == 'review_alerts' and item.get('decision') != 'suspected_manipulation':
+            return '局部片段需复核'
     else:
         item = result.get('results', {}).get(task)
         if item is None:

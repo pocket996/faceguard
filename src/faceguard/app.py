@@ -15,9 +15,10 @@ from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QSystemTrayIcon
 
 from faceguard.history import HistoryStore
-from faceguard.detection import DetectionWorker, DetailPreviewWorker, task_summary, detail_records
+from faceguard.detection import DetectionWorker, DetailPreviewWorker, task_summary, task_state, detail_records
 from faceguard.model_registry import resource_status, generation_profiles
 from faceguard.data_locations import resolve_data_path
+from faceguard.reports import write_report
 
 UI_DIRECTORY = Path(__file__).resolve().parent / 'ui'
 # Keep Python-owned QML properties and rendering on the GUI thread on Windows.
@@ -29,7 +30,6 @@ VIDEOS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.wmv'}
 class AppController(QObject):
     changed = Signal()
     settingsChanged = Signal()
-    previewMotion = Signal()
     historyChanged = Signal()
     mediaOpened = Signal()
     detectionFinished = Signal()
@@ -87,6 +87,8 @@ class AppController(QObject):
     hasResult = Property(bool, lambda self: bool(self._result), notify=changed)
     generationSummary = Property(str, lambda self: ('视频暂不支持此项' if self._kind == 'video' and not self._result else task_summary(self._result, 'generation')), notify=changed)
     manipulationSummary = Property(str, lambda self: task_summary(self._result, 'manipulation'), notify=changed)
+    generationState = Property(str, lambda self: 'unavailable' if self._kind == 'video' else ('working' if self._busy else task_state(self._result, 'generation')), notify=changed)
+    manipulationState = Property(str, lambda self: 'working' if self._busy else task_state(self._result, 'manipulation'), notify=changed)
     resultDetails = Property('QVariantList', lambda self: detail_records(self._result), notify=changed)
     resultText = Property(str, lambda self: self.result_text(), notify=changed)
     detailPreviewUrl = Property(QUrl, lambda self: self._detail_url, notify=changed)
@@ -242,24 +244,19 @@ class AppController(QObject):
     def export_report(self, filename):
         if not self._result:
             raise ValueError('请先完成检测。')
-        path = Path(filename)
-        if path.suffix.lower() == '.json':
-            contents = json.dumps(self._result, ensure_ascii=False, indent=2, allow_nan=False)
-        elif path.suffix.lower() == '.txt':
-            contents = ('谛听 · FaceGuard 检测报告\n文件：' + self._result['path'] + '\n\n' + self.result_text()
-                        + '\n\n分数是模型倾向，不是真假概率。热力图与精确定位未包含在本报告中。\n'
-                        + '\n技术记录\n' + json.dumps(self._result, ensure_ascii=False, indent=2, allow_nan=False))
-        else:
-            raise ValueError('报告请保存为 .json 或 .txt。')
-        path.write_text(contents, encoding='utf-8')
+        write_report(filename, self._result, self.result_text())
 
     @Slot()
     def saveReport(self):
         if not self._result:
             return
-        filename, _ = QFileDialog.getSaveFileName(None, '保存检测报告', Path(self._name).stem + '-检测报告.json', 'JSON 报告 (*.json);;文本报告 (*.txt)')
+        filename, selected_filter = QFileDialog.getSaveFileName(
+            None, '保存检测报告', Path(self._name).stem + '-检测报告.pdf',
+            'PDF 文档 (*.pdf);;文本文档 (*.txt)')
         if filename:
             try:
+                if not Path(filename).suffix:
+                    filename += '.txt' if '*.txt' in selected_filter else '.pdf'
                 self.export_report(filename)
             except (OSError, ValueError) as error:
                 self.showError('报告保存失败：' + str(error))

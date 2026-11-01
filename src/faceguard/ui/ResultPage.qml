@@ -122,37 +122,47 @@ Item {
                 }
             }
             Rectangle {
-                Layout.preferredWidth: 285; Layout.fillHeight: true
+                Layout.preferredWidth: page.width < 1150 ? 310 : 340; Layout.fillHeight: true
                 radius: 18; color: "#fcfbf7"; border.color: "#e1dfd3"
-                ColumnLayout {
-                    anchors.fill: parent; anchors.margins: 18; spacing: page.compact ? 6 : 9
-                    Text { text: "分析摘要"; font.family: "SimSun"; font.pixelSize: 21; color: "#355349" }
-                    Text { text: "AI 整脸生成"; color: "#355349"; font.pixelSize: 13 }
-                    Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: controller.generationSummary; color: "#7c8778"; font.pixelSize: 12 }
-                    Rectangle { Layout.fillWidth: true; height: 1; color: "#e5e2d6" }
-                    Text { text: "换脸 / 面部篡改"; color: "#355349"; font.pixelSize: 13 }
-                    Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: controller.manipulationSummary; color: "#7c8778"; font.pixelSize: 12 }
-                    Rectangle { Layout.fillWidth: true; height: 1; color: "#e5e2d6" }
-                    Text { text: "人脸与采样帧"; color: "#355349"; font.pixelSize: 13 }
-                    ListView {
-                        objectName: "faceResultList"
-                        Layout.fillWidth: true; Layout.preferredHeight: page.compact ? 75 : 110; clip: true
-                        model: controller.resultDetails; spacing: 4
-                        ScrollBar.vertical: ScrollBar { }
-                        delegate: AppButton {
-                            required property var modelData
-                            required property int index
-                            width: ListView.view.width; implicitHeight: 34
-                            text: modelData.title
-                            onClicked: controller.selectDetail(index)
+                ScrollView {
+                    objectName: "resultSummaryScroll"
+                    anchors.fill: parent; anchors.margins: 18; clip: true
+                    contentWidth: availableWidth
+                    ScrollBar.vertical.policy: ScrollBar.AsNeeded
+                    ScrollBar.vertical.active: true
+                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                    ColumnLayout {
+                        width: parent.width; spacing: page.compact ? 10 : 12
+                        Text { text: "分析摘要"; font.family: "SimSun"; font.pixelSize: 21; color: "#355349" }
+                        Text { text: "AI 整脸生成"; color: "#355349"; font.pixelSize: 15; font.bold: true }
+                        Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: controller.generationSummary; color: "#55705f"; font.pixelSize: 14; lineHeight: 1.3 }
+                        Rectangle { Layout.fillWidth: true; height: 1; color: "#e5e2d6" }
+                        Text { text: "换脸 / 面部篡改"; color: "#355349"; font.pixelSize: 15; font.bold: true }
+                        Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: controller.manipulationSummary; color: "#55705f"; font.pixelSize: 14; lineHeight: 1.3 }
+                        Rectangle { Layout.fillWidth: true; height: 1; color: "#e5e2d6" }
+                        Text { text: "人脸与采样帧"; color: "#355349"; font.pixelSize: 15; font.bold: true }
+                        ListView {
+                            objectName: "faceResultList"
+                            Layout.fillWidth: true; Layout.preferredHeight: page.compact ? 75 : 110; clip: true
+                            model: controller.resultDetails; spacing: 4
+                            ScrollBar.vertical: ScrollBar { }
+                            delegate: AppButton {
+                                required property var modelData
+                                required property int index
+                                width: ListView.view.width; implicitHeight: 34
+                                text: modelData.title
+                                onClicked: controller.selectDetail(index)
+                            }
                         }
-                    }
-                    Image { objectName: "selectedFacePreview"; Layout.fillWidth: true; Layout.preferredHeight: controller.detailPreviewUrl.toString() ? (page.compact ? 70 : 100) : 0; source: controller.detailPreviewUrl; fillMode: Image.PreserveAspectFit }
-                    Text { Layout.fillWidth: true; text: controller.selectedDetailText; visible: !!text; wrapMode: Text.Wrap; color: "#55705f"; font.pixelSize: 11 }
-                    ScrollView {
-                        Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 50; Layout.preferredHeight: 120; clip: true
-                        contentWidth: availableWidth
-                        TextArea { objectName: "detectionResultText"; text: controller.resultText; readOnly: true; wrapMode: TextEdit.Wrap; font.pixelSize: 11; color: "#55705f"; background: Rectangle { color: "#e9ecdf"; radius: 10 } }
+                        Image { objectName: "selectedFacePreview"; Layout.fillWidth: true; Layout.preferredHeight: controller.detailPreviewUrl.toString() ? (page.compact ? 70 : 100) : 0; source: controller.detailPreviewUrl; fillMode: Image.PreserveAspectFit }
+                        Text { Layout.fillWidth: true; text: controller.selectedDetailText; visible: !!text; wrapMode: Text.Wrap; color: "#355349"; font.pixelSize: 14; lineHeight: 1.35 }
+                        TextArea {
+                            objectName: "detectionResultText"; Layout.fillWidth: true
+                            text: controller.resultText; readOnly: true; selectByMouse: true
+                            wrapMode: TextEdit.Wrap; font.pixelSize: 15; color: "#355349"
+                            padding: 12
+                            background: Rectangle { color: "#e9ecdf"; radius: 10 }
+                        }
                     }
                 }
             }

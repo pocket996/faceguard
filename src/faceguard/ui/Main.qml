@@ -17,38 +17,15 @@ Window {
     property color muted: "#7c8778"
     property color gold: "#b59b65"
     property bool pet: controller.petMode
-    property bool motionPreview: false
-    property real petOffset: 0
     property bool reduced: controller.reducedMotion
     property string activePage: "workspace"
     readonly property bool mediaImageReady: photo.status === Image.Ready
     readonly property bool videoIsPlaying: player.playbackState === MediaPlayer.PlayingState
     readonly property int videoPosition: player.position
-    property string stageText: controller.busy ? "正在辨析，请稍候" : motionPreview ? "动作预览 · 非检测" : controller.hasResult ? "辨析已毕，请查阅结果" : controller.fileName ? "文件已就绪，静候辨析" : "以静听万象，以慧辨真伪"
+    property string stageText: controller.busy ? "正在辨析，请稍候" : controller.hasResult ? "辨析已毕，请查阅结果" : controller.fileName ? "文件已就绪，静候辨析" : "以静听万象，以慧辨真伪"
 
-    onPetChanged: {
-        if (motionPreview) motionSequence.stop()
-        motionPreview = false
-        creature.listening = 0
-        creature.walking = 0
-        petOffset = 0
-    }
-    onReducedChanged: {
-        if (reduced) {
-            motionSequence.stop(); motionPreview = false
-            creature.listening = 0; creature.walking = 0; petOffset = 0
-        }
-    }
-    function startMotion() {
-        if (reduced) { detailsDialog.open(); return }
-        motionSequence.restart()
-    }
     function showPage(page) {
         player.pause()
-        if (motionPreview) {
-            motionSequence.stop(); motionPreview = false
-            creature.listening = 0; creature.walking = 0; petOffset = 0
-        }
         activePage = page
     }
     Shortcut { sequence: "Ctrl+O"; onActivated: controller.chooseFile("image") }
@@ -56,7 +33,6 @@ Window {
     Shortcut { sequence: "Ctrl+H"; enabled: !window.pet; onActivated: window.showPage("history") }
     Shortcut { sequence: "Ctrl+R"; enabled: !window.pet; onActivated: window.showPage("results") }
     Shortcut { sequence: "F1"; enabled: !window.pet; onActivated: guideDialog.open() }
-    Shortcut { sequence: "Escape"; enabled: window.motionPreview; onActivated: { motionSequence.stop(); window.motionPreview = false; creature.listening = 0; creature.walking = 0; window.petOffset = 0 } }
     Connections {
         target: controller
         function onMediaOpened() {
@@ -64,7 +40,6 @@ Window {
             resultsPage.zoom = 1
             window.showPage("workspace")
         }
-        function onDetectionFinished() { window.showPage("results") }
     }
 
     Rectangle {
@@ -73,13 +48,6 @@ Window {
         visible: !window.pet
         color: "#f3f1e8"; radius: 23
         border.color: "#e1dfd3"; border.width: 1
-        // Deliberately quiet celadon horizon, beneath the three working areas.
-        Rectangle {
-            width: parent.width * 0.7; height: 250
-            anchors.horizontalCenter: parent.horizontalCenter; y: parent.height * 0.41
-            radius: height / 2; opacity: 0.45
-            gradient: Gradient { GradientStop { position: 0; color: "#f3f1e8" } GradientStop { position: 0.65; color: "#e1e7d9" } GradientStop { position: 1; color: "#f3f1e8" } }
-        }
     }
 
     Rectangle {
@@ -91,7 +59,7 @@ Window {
         MouseArea { anchors.fill: parent; onPressed: window.startSystemMove(); onDoubleClicked: window.visibility === Window.Maximized ? window.showNormal() : window.showMaximized() }
         Row {
             x: 30; anchors.verticalCenter: parent.verticalCenter; spacing: 12
-            Image { source: "brand.svg"; width: 36; height: 36; anchors.verticalCenter: parent.verticalCenter }
+            Image { objectName: "brandMark"; source: "brand.svg"; width: 42; height: 42; anchors.verticalCenter: parent.verticalCenter }
             Text { text: "谛听"; font.family: "SimSun"; font.pixelSize: 27; font.bold: true; color: window.ink; anchors.verticalCenter: parent.verticalCenter }
             Rectangle { width: 1; height: 24; color: "#d8c9a8"; anchors.verticalCenter: parent.verticalCenter }
             Column { spacing: 3; anchors.verticalCenter: parent.verticalCenter
@@ -101,9 +69,9 @@ Window {
         }
         Row { anchors.right: parent.right; anchors.rightMargin: 20; anchors.verticalCenter: parent.verticalCenter; spacing: 6
             Text { text: "◉  本机处理"; font.pixelSize: 12; color: window.muted; anchors.verticalCenter: parent.verticalCenter; rightPadding: 16 }
-            AppButton { text: "使用说明"; quiet: true; implicitWidth: 80; onClicked: guideDialog.open() }
+            AppButton { objectName: "guideEntry"; text: "使用说明"; quiet: true; implicitWidth: 80; onClicked: guideDialog.open() }
             AppButton { objectName: "historyEntry"; text: "历史"; primary: window.activePage === "history"; quiet: window.activePage !== "history"; implicitWidth: 58; onClicked: window.showPage("history") }
-            AppButton { text: "设置"; quiet: true; implicitWidth: 58; onClicked: settingsDialog.open() }
+            AppButton { objectName: "settingsEntry"; text: "设置"; quiet: true; implicitWidth: 58; onClicked: settingsDialog.open() }
             AppButton { text: "收为桌宠 ↘"; quiet: true; implicitWidth: 110; enabled: !controller.petTransitioning; onClicked: controller.togglePet() }
             AppButton { text: "—"; quiet: true; implicitWidth: 36; onClicked: window.showMinimized(); Accessible.name: "最小化" }
             AppButton { text: "×"; quiet: true; implicitWidth: 36; onClicked: Qt.quit(); Accessible.name: "退出应用" }
@@ -185,27 +153,19 @@ Window {
                 Rectangle { Layout.fillWidth: true; height: 1; color: "#e5e2d6" }
                 Repeater {
                     model: ["AI 整脸生成", "换脸 / 面部篡改"]
-                    Rectangle {
+                    ResultSummaryCard {
                         required property string modelData
                         required property int index
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: window.height < 800 ? 78 : 105
-                        Layout.minimumHeight: window.height < 800 ? 78 : 105
-                        Layout.maximumHeight: window.height < 800 ? 78 : 105
-                        radius: 13; color: "#faf9f3"; border.color: "#e5e5da"
-                        Row { anchors.left: parent.left; anchors.leftMargin: 13; anchors.verticalCenter: parent.verticalCenter; spacing: 12
-                            Rectangle { width: 39; height: 39; radius: 20; color: "#e1e9de"; Text { anchors.centerIn: parent; text: index === 0 ? "◎" : "⌘"; font.pixelSize: 23; color: "#678d79" } }
-                            Column { spacing: 10; width: 160
-                                Text { text: modelData; font.family: "SimSun"; font.pixelSize: 16; color: window.ink }
-                                Text { width: parent.width; wrapMode: Text.Wrap; text: index === 0 ? controller.generationSummary : controller.manipulationSummary; color: window.muted; font.pixelSize: 11 }
-                            }
-                        }
+                        Layout.fillWidth: true; Layout.preferredHeight: 104
+                        title: modelData
+                        summary: index === 0 ? controller.generationSummary : controller.manipulationSummary
+                        state: index === 0 ? controller.generationState : controller.manipulationState
                     }
                 }
-                Text { text: controller.hasResult ? "两项结果分别查看；未检出不等于保证真实。" : "未完成检测，不生成结论或分数。"; color: window.muted; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.Wrap }
+
+                Text { text: controller.busy ? "正在辨析，结果会显示在这里。" : controller.hasResult ? "两项结果分别查看；未检出不等于保证真实。" : "完成检测后，在此查看结果。"; color: window.muted; font.pixelSize: 12; Layout.fillWidth: true; wrapMode: Text.Wrap }
                 Item { Layout.fillHeight: true }
                 AppButton { objectName: "resultsEntry"; text: "查看结果与热力图  ↗"; primary: true; Layout.fillWidth: true; implicitHeight: window.height < 800 ? 36 : 44; onClicked: window.showPage("results") }
-                AppButton { objectName: "technicalDetails"; text: "技术详情  ↗"; quiet: true; Layout.fillWidth: true; implicitHeight: window.height < 800 ? 34 : 44; onClicked: detailsDialog.open() }
             }
         }
 
@@ -223,7 +183,6 @@ Window {
             }
             Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 10
                 AppButton { objectName: "startDetection"; text: controller.busy ? (controller.cancelling ? "正在取消" : "取消检测") : "开始检测"; primary: true; enabled: controller.busy ? !controller.cancelling : !!controller.fileName && controller.engineReady; implicitWidth: 135; onClicked: controller.busy ? controller.cancelDetection() : controller.startDetection() }
-                AppButton { text: window.motionPreview ? "停止预览" : "预览倾听动作"; implicitWidth: 142; onClicked: { if (window.motionPreview) { motionSequence.stop(); window.motionPreview = false; creature.listening = 0; creature.walking = 0; window.petOffset = 0 } else window.startMotion() } }
             }
             Text { text: (controller.progressText || controller.engineStatus) + "\n生成模型：" + controller.generationModelLabel; width: parent.width; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter; color: window.muted; font.pixelSize: 10 }
         }
@@ -255,9 +214,20 @@ Window {
         y: window.pet ? 38 : 173
         width: window.pet ? window.width : window.width - 660
         height: window.pet ? window.height - 90 : window.height - 482
+        Loader {
+            id: courtyardLoader
+            objectName: "courtyardLoader"
+            anchors.fill: parent
+            active: !window.pet && window.activePage === "workspace"
+            source: "InkCourtyard.qml"
+            onLoaded: {
+                item.reducedMotion = Qt.binding(function() { return controller.reducedMotion })
+                item.gaze = Qt.binding(function() { return creature.gaze })
+            }
+        }
         Canvas {
-            anchors.horizontalCenter: parent.horizontalCenter; y: parent.height * 0.78
-            width: parent.width * 0.68; height: parent.height * 0.2
+            anchors.horizontalCenter: parent.horizontalCenter; y: parent.height * (window.pet ? 0.78 : 0.83)
+            width: parent.width * (window.pet ? 0.68 : 0.35); height: parent.height * 0.09
             onWidthChanged: requestPaint()
             onHeightChanged: requestPaint()
             onPaint: {
@@ -271,7 +241,7 @@ Window {
         Canvas {
             id: ripples; anchors.fill: parent; opacity: creature.listening * 0.8
             property real phase: 0
-            NumberAnimation on phase { from: 0; to: 1; duration: 2400; loops: Animation.Infinite; running: window.motionPreview && !window.reduced }
+            NumberAnimation on phase { from: 0; to: 1; duration: 2400; loops: Animation.Infinite; running: controller.busy && !window.reduced }
             onPhaseChanged: requestPaint()
             onWidthChanged: requestPaint()
             onHeightChanged: requestPaint()
@@ -289,9 +259,10 @@ Window {
             id: creature
             objectName: "ditingCharacter"
             anchors.fill: parent
+            anchors.bottomMargin: window.pet ? 0 : parent.height * 0.07
             reducedMotion: controller.reducedMotion
-            transform: Translate { x: window.petOffset }
-            motion: controller.fileName ? "ready" : "idle"
+            listening: controller.busy && !window.reduced ? 1 : 0
+            motion: controller.busy ? "listening" : controller.fileName ? "ready" : "idle"
         }
         MouseArea {
             id: characterMouse
@@ -306,15 +277,15 @@ Window {
                 if (mouse.button === Qt.RightButton) petMenu.popup()
             }
             onPositionChanged: function(mouse) {
-                creature.gaze = Math.max(-1, Math.min(1, (mouse.x / width - 0.5) * 2))
+                creature.gaze = controller.busy ? 0 : Math.max(-1, Math.min(1, (mouse.x / width - 0.5) * 2))
                 if (window.pet && pressed && !dragged && Math.abs(mouse.x - pressX) + Math.abs(mouse.y - pressY) > 10) {
                     dragged = true; window.startSystemMove()
                 }
             }
             onExited: creature.gaze = 0
-            onClicked: function(mouse) { if (mouse.button === Qt.LeftButton && !dragged) creature.respond() }
+            onClicked: function(mouse) { if (mouse.button === Qt.LeftButton && !dragged && !controller.busy) creature.respond() }
             onDoubleClicked: if (!controller.petTransitioning) controller.togglePet()
-            ToolTip.visible: containsMouse && !pressed && !window.motionPreview
+            ToolTip.visible: containsMouse && !pressed && !controller.busy
             ToolTip.delay: 1100
             ToolTip.text: window.pet ? "拖动可停靠，双击展开；右键查看更多" : "点击回应，双击收为桌宠"
         }
@@ -337,6 +308,8 @@ Window {
     }
     Menu {
         id: petMenu
+        padding: 8
+        background: Rectangle { color: "#fcfbf7"; radius: 16; border.color: "#cbd7ca" }
         MenuItem { text: "打开工作台"; onTriggered: controller.showWorkbench() }
         MenuItem { text: "选择照片"; onTriggered: controller.chooseFile("image") }
         MenuItem { text: "选择视频"; onTriggered: controller.chooseFile("video") }
@@ -346,60 +319,81 @@ Window {
         MenuItem { text: "暂时隐藏（从托盘恢复）"; onTriggered: controller.hideWindow() }
         MenuItem { text: "退出"; onTriggered: Qt.quit() }
     }
-    SequentialAnimation {
-        id: motionSequence
-        ScriptAction { script: { window.motionPreview = true; creature.walking = 1 } }
-        NumberAnimation { target: window; property: "petOffset"; to: -20; duration: 600; easing.type: Easing.InOutSine }
-        NumberAnimation { target: window; property: "petOffset"; to: 0; duration: 600; easing.type: Easing.InOutSine }
-        ScriptAction { script: { creature.walking = 0; creature.listening = 1 } }
-        PauseAnimation { duration: 4200 }
-        ScriptAction { script: creature.listening = 0 }
-        PauseAnimation { duration: 1100 }
-        ScriptAction { script: { creature.respond(); window.motionPreview = false } }
-    }
-
-    Dialog {
-        id: guideDialog
-        parent: Overlay.overlay
-        anchors.centerIn: parent; width: 660; modal: true
-        title: "谛听 · 使用说明"; standardButtons: Dialog.Ok
-        background: Rectangle { color: "#fcfbf7"; radius: 18; border.color: "#dddcca" }
-        ColumnLayout { width: parent.width; spacing: 18
-            Text { Layout.fillWidth: true; text: "01  选择媒体\n选择或拖入一张照片、一段视频。文件只在本机读取。照片可放大预览，视频可静音播放。"; wrapMode: Text.Wrap; color: window.ink; font.pixelSize: 14; lineHeight: 1.6 }
-            Text { Layout.fillWidth: true; text: "02  中央谛听\n角色沿用原效果图的形象，以同一张透明资产做连续网格形变，支持轻呼吸、尾摆、点头与侧倾。动作预览不会进行检测；工作台当前为 2.5D 展示；设置中可查看带眨眼与大幅回应动作的 3D 版本。"; wrapMode: Text.Wrap; color: window.ink; font.pixelSize: 13; lineHeight: 1.5 }
-            Text { Layout.fillWidth: true; text: "03  桌宠模式\n点击“收为桌宠”缩小为透明窗口，拖动角色可调整位置。双击或点击“展开”返回工作台，右键可设置、隐藏或退出。隐藏后可从系统托盘恢复。"; wrapMode: Text.Wrap; color: window.ink; font.pixelSize: 14; lineHeight: 1.6 }
-            Text { Layout.fillWidth: true; text: "04  检测与历史\n选择媒体后点击“开始检测”；照片分别检查整脸生成和面部篡改，视频检查面部篡改并采样复核。可取消、逐脸查看并保存 JSON / 文本报告；历史记录可重新打开结果。热力图算法尚待实现，导入不等于检测完成。"; wrapMode: Text.Wrap; color: "#967849"; font.pixelSize: 12; lineHeight: 1.5 }
-        }
-    }
-    Dialog {
-        id: settingsDialog
-        objectName: "settingsDialog"
-        parent: Overlay.overlay; anchors.centerIn: parent; width: 470; modal: true
-        title: "工作空间设置"; standardButtons: Dialog.Ok
-        background: Rectangle { color: "#fcfbf7"; radius: 18; border.color: "#dddcca" }
-        ColumnLayout { width: parent.width; spacing: 14
-            Text { text: "整脸生成模型"; color: window.ink; font.pixelSize: 13 }
-            ComboBox {
-                objectName: "generationModelSelector"
-                Layout.fillWidth: true; enabled: !controller.busy
-                model: controller.generationModels; textRole: "label"
-                currentIndex: controller.generationModelIndex
-                onActivated: function(index) { controller.setGenerationModel(index) }
+    AppDialog {
+        id: guideDialog; objectName: "guideDialog"
+        width: 660; title: "使用说明"
+        eyebrow: "使用说明 / GET STARTED"
+        subtitle: "三个步骤，查看照片与视频中的可疑线索。"
+        confirmText: "开始使用"; footerNote: "本机处理 · 媒体不上传"
+        contentItem: ScrollView {
+            implicitHeight: guideContent.implicitHeight
+            contentWidth: availableWidth; clip: true
+            ScrollBar.vertical.active: true
+            ColumnLayout {
+                id: guideContent; width: parent.width; spacing: 12
+                InfoCard { Layout.fillWidth: true; marker: "01"; title: "选一张照片，或一段视频"; body: "点击选择文件，也可以直接拖入工作台。照片支持放大，视频可静音预览。" }
+                InfoCard { Layout.fillWidth: true; marker: "02"; title: "点击检测，谛听俯耳倾听"; body: "辨析与倾听动作同时开始，结束后回到待机。右侧先显示结果概览，点击查看按钮再进入详细结果。" }
+                InfoCard { Layout.fillWidth: true; marker: "03"; title: "细看线索，保存报告"; body: "逐脸查看生成与篡改结果，视频可查看采样帧。报告默认 PDF，也可选 TXT；历史记录可重新打开。" }
+                Text { Layout.fillWidth: true; text: "未检出不代表真实，分数不是真假概率。热力图尚待实现；你仍可查看真实检测分数与人脸。"; wrapMode: Text.Wrap; font.pixelSize: 13; lineHeight: 1.5; color: "#8c744c" }
             }
-            Text { Layout.fillWidth: true; text: controller.generationModelNotice + " 切换后需重新检测；未检出不代表照片真实。"; font.pixelSize: 12; wrapMode: Text.Wrap; color: window.muted }
-            CheckBox { text: "减少动态效果"; checked: controller.reducedMotion; onClicked: controller.toggleReducedMotion() }
-            CheckBox { text: "窗口始终置顶"; checked: controller.topmost; onClicked: controller.toggleTopmost() }
-            AppButton { text: "查看角色立体预览"; implicitWidth: 182; onClicked: { settingsDialog.close(); volumeDialog.open() } }
-            Text { Layout.fillWidth: true; text: "桌宠位置和以上偏好保存在本机。历史库保存文件路径、名称、大小与时间，不复制媒体内容，也不上传文件。可在右上角“历史”删除记录或清空。"; font.pixelSize: 12; wrapMode: Text.Wrap; color: window.muted; lineHeight: 1.6 }
         }
     }
-    Dialog {
+    AppDialog {
+        id: settingsDialog; objectName: "settingsDialog"
+        width: 600; title: "工作空间设置"
+        eyebrow: "工作空间设置 / PREFERENCES"
+        subtitle: "显示、角色与检测偏好，集中管理。"
+        footerNote: "偏好自动保存在本机"; confirmText: "完成设置"
+        contentItem: ScrollView {
+            implicitHeight: settingsContent.implicitHeight
+            contentWidth: availableWidth; clip: true
+            ScrollBar.vertical.active: true
+            ColumnLayout {
+                id: settingsContent; width: parent.width; spacing: 14
+                InfoCard { Layout.fillWidth: true; marker: "◎"; title: "当前模型 · " + controller.generationModelLabel; body: controller.generationModelNotice }
+                Rectangle {
+                    Layout.fillWidth: true; implicitHeight: preferences.implicitHeight + 24
+                    radius: 16; color: "#f1f3eb"; border.color: "#e0e6d8"
+                    ColumnLayout {
+                        id: preferences; x: 16; y: 12; width: parent.width - 32; spacing: 6
+                        AppSwitch { objectName: "reducedMotionSwitch"; text: "减少动态效果"; checked: controller.reducedMotion; onClicked: controller.toggleReducedMotion() }
+                        Rectangle { Layout.fillWidth: true; height: 1; color: "#dfe5d7" }
+                        AppSwitch { objectName: "topmostSwitch"; text: "窗口始终置顶"; checked: controller.topmost; onClicked: controller.toggleTopmost() }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true; spacing: 10
+                    AppButton { objectName: "volumePreviewEntry"; text: "角色立体预览  ↗"; Layout.fillWidth: true; onClicked: { settingsDialog.close(); volumeDialog.open() } }
+                    AppButton { objectName: "technicalDetails"; text: "技术详情  ↗"; Layout.fillWidth: true; onClicked: { settingsDialog.close(); detailsDialog.open() } }
+                }
+                AppButton {
+                    id: advancedToggle; objectName: "advancedModelOptions"; Layout.fillWidth: true
+                    property bool expanded: false
+                    text: expanded ? "收起高级选项  ▴" : "高级选项 · 实验模型  ▾"
+                    quiet: true; onClicked: expanded = !expanded
+                }
+                ColumnLayout {
+                    visible: advancedToggle.expanded; Layout.fillWidth: true; spacing: 10
+                    Text { Layout.fillWidth: true; text: "实验模型用于对照评测，日常无需切换。不同候选在检出率与误报之间各有取舍。"; font.pixelSize: 13; wrapMode: Text.Wrap; color: window.muted }
+                    AppComboBox {
+                        objectName: "generationModelSelector"
+                        Layout.fillWidth: true; enabled: !controller.busy
+                        model: controller.generationModels; textRole: "label"
+                        currentIndex: controller.generationModelIndex
+                        onActivated: function(index) { controller.setGenerationModel(index) }
+                    }
+                    Text { Layout.fillWidth: true; text: "切换后需重新检测，历史结果保留。"; font.pixelSize: 13; wrapMode: Text.Wrap; color: window.muted }
+                }
+                Text { Layout.fillWidth: true; text: "历史只保存文件路径与检测记录，不复制媒体，可从“历史”中删除。"; font.pixelSize: 12; wrapMode: Text.Wrap; color: "#758674"; lineHeight: 1.5 }
+            }
+        }
+    }
+    AppDialog {
         id: volumeDialog
         objectName: "volumePreviewDialog"
         parent: Overlay.overlay; anchors.centerIn: parent
         width: Math.min(720, window.width - 80); height: Math.min(720, window.height - 50)
-        title: "谛听 · 立体预览"; modal: true; standardButtons: Dialog.Close
-        background: Rectangle { color: "#f7f5ec"; radius: 18; border.color: "#dddcca" }
+        title: "谛听 · 立体预览"; eyebrow: "角色空间 / DITING"; confirmText: "收起预览"
         ColumnLayout {
             anchors.fill: parent; spacing: 8
             Item {
@@ -434,19 +428,28 @@ Window {
             Text { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: controller.reducedMotion ? "已开启减少动态效果，角色保持静止 · 可拖动或滚轮旋转" : "拖动或滚轮旋转 · 眨眼、大幅点头、转头倾听"; color: window.muted; font.pixelSize: 12 }
         }
     }
-    Dialog {
-        id: detailsDialog
-        parent: Overlay.overlay; anchors.centerIn: parent; width: 520; modal: true
-        title: "正式项目 · 技术详情"; standardButtons: Dialog.Ok
-        background: Rectangle { color: "#fcfbf7"; radius: 18; border.color: "#dddcca" }
-        Text { width: parent.width; text: "展示层：PySide6 / Qt Quick\n工作台与桌宠：同源资产 + 2.5D 连续网格形变\n立体预览：20 骨骼蒙皮，眨眼 / 回应 / 倾听\n完整面部表演与四足行走：待完善\n媒体：本机读取，不上传\n历史：本机 SQLite，保存检测结果\n模型：FLUX / SD3.5 生成联合版 + FF++ 篡改基线\n视频：整段16帧基线与有上限的局部复核，可能漏过短事件\n照片篡改：视频帧模型，普通照片误报尚需评测\n报告：JSON / 文本；分数不是真假概率\n热力图：算法尚待实现\n\n正式应用使用独立推理模块和本地资源目录，不依赖 reference_run 运行。"; wrapMode: Text.Wrap; color: window.ink; font.pixelSize: 13; lineHeight: 1.7 }
+    AppDialog {
+        id: detailsDialog; objectName: "technicalDetailsDialog"
+        width: 660; title: "技术与能力说明"
+        eyebrow: "技术详情 / ABOUT"; confirmText: "了解了"
+        contentItem: ScrollView {
+            implicitHeight: technicalContent.implicitHeight
+            contentWidth: availableWidth; clip: true
+            ScrollBar.vertical.active: true
+            ColumnLayout {
+                id: technicalContent; width: parent.width; spacing: 12
+                InfoCard { Layout.fillWidth: true; marker: "◎"; title: "模型与媒体"; body: "当前生成模型：" + controller.generationModelLabel + "\n篡改模型：FF++ 基线。视频使用整段 16 帧基线与有采样上限的局部复核；短事件仍可能漏检。普通照片篡改结果仅作复核线索。" }
+                InfoCard { Layout.fillWidth: true; marker: "◇"; title: "能力与边界"; body: "工作台与桌宠使用同源 2.5D 连续形变，立体预览为 20 骨骼坐姿角色。完整面部表演、四足行走及热力图尚待完善。分数是模型倾向，不是真假概率。" }
+                Text { Layout.fillWidth: true; text: "PySide6 / Qt Quick · 本机 SQLite 历史 · PDF / TXT 报告\n独立推理模块与本地资源，不依赖参考项目运行。"; wrapMode: Text.Wrap; color: "#6c806e"; font.pixelSize: 12; lineHeight: 1.5 }
+            }
+        }
     }
-    Dialog {
+    AppDialog {
         id: previewDialog
+        objectName: "mediaPreviewDialog"
         parent: Overlay.overlay; anchors.centerIn: parent
         width: window.width - 100; height: window.height - 90; modal: true
-        title: controller.fileName; standardButtons: Dialog.Close
-        background: Rectangle { color: "#fcfbf7"; radius: 18; border.color: "#dddcca" }
+        title: controller.fileName; eyebrow: "媒体预览 / PREVIEW"; confirmText: "关闭预览"
         Image { anchors.fill: parent; source: previewDialog.visible ? controller.previewUrl : ""; autoTransform: true; fillMode: Image.PreserveAspectFit; sourceSize.width: 2400 }
     }
     MouseArea { visible: !window.pet; width: 18; height: 18; anchors.right: parent.right; anchors.bottom: parent.bottom; cursorShape: Qt.SizeFDiagCursor; onPressed: window.startSystemResize(Qt.RightEdge | Qt.BottomEdge) }

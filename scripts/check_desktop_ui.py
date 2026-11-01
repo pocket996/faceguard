@@ -12,9 +12,9 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
-from PySide6.QtCore import QObject, QMetaObject, QSettings, QUrl, qInstallMessageHandler
+from PySide6.QtCore import QObject, QMetaObject, QSettings, QUrl, QPointF, Qt, qInstallMessageHandler
 from PySide6.QtGui import QFont, QImage
-from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtQml import QQmlApplicationEngine, QQmlProperty
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -74,14 +74,18 @@ def main():
         assert '2.5D' in character.property('representation')
         assert not window.findChild(QObject, 'startDetection').property('enabled')
         assert not any('reference_run' in str(getattr(m, '__file__', '')) for m in list(sys.modules.values()) if m)
-        QMetaObject.invokeMethod(window, 'startMotion')
-        QTest.qWait(2600)
-        assert window.property('motionPreview')
-        assert character.property('listening') > 0.9
+        controller._busy = True
+        controller.changed.emit()
+        wait_for(lambda: character.property('listening') > 0.99)
         capture('02-listening')
-        QTest.qWait(4500)
-        assert not window.property('motionPreview')
-        assert character.property('listening') < 0.01
+        controller.toggleReducedMotion()
+        wait_for(lambda: character.property('listening') < 0.01)
+        assert controller.busy, 'Reducing animation must not cancel detection'
+        controller.toggleReducedMotion()
+        wait_for(lambda: character.property('listening') > 0.99)
+        controller._busy = False
+        controller.changed.emit()
+        wait_for(lambda: character.property('listening') < 0.01)
 
         fixture = Path(temporary) / 'preview.png'
         image = QImage(600, 800, QImage.Format.Format_RGB32)
@@ -147,7 +151,43 @@ def main():
         window.resize(1080, 720)
         capture('05-small-window')
         details = window.findChild(QObject, 'technicalDetails')
-        assert details.y() + details.height() <= details.parentItem().height() + 1, (details.y(), details.height(), details.parentItem().height())
+        assert not details.property('visible'), 'Technical details must not appear on the workspace'
+        settings = window.findChild(QObject, 'settingsDialog')
+        QMetaObject.invokeMethod(settings, 'open')
+        QTest.qWait(300)
+        assert details.property('visible')
+        advanced = window.findChild(QObject, 'advancedModelOptions')
+        selector = window.findChild(QObject, 'generationModelSelector')
+        assert not selector.property('visible'), 'Experimental versions must be collapsed initially'
+        capture('13-settings')
+        QMetaObject.invokeMethod(advanced, 'clicked')
+        QTest.qWait(300)
+        assert selector.property('visible')
+        assert settings.property('height') <= window.height() - 60
+        capture('14-settings-advanced')
+        selector_center = selector.mapToScene(QPointF(selector.width() / 2, selector.height() / 2)).toPoint()
+        QTest.mouseClick(window, Qt.LeftButton, Qt.NoModifier, selector_center)
+        wait_for(lambda: QQmlProperty(selector, 'popup.visible').read())
+        capture('15-model-choices')
+        QTest.keyClick(window, Qt.Key_Escape)
+        wait_for(lambda: not QQmlProperty(selector, 'popup.visible').read())
+        assert settings.property('visible')
+        QMetaObject.invokeMethod(settings, 'close')
+        for name, screenshot in [('guideDialog', '16-guide'), ('technicalDetailsDialog', '17-technical'), ('mediaPreviewDialog', '18-media-preview')]:
+            dialog = window.findChild(QObject, name)
+            QMetaObject.invokeMethod(dialog, 'open')
+            capture(screenshot)
+            assert dialog.property('visible')
+            assert dialog.property('height') <= window.height() - 50
+            QMetaObject.invokeMethod(dialog.findChild(QObject, 'dialogConfirm'), 'clicked')
+            wait_for(lambda: not dialog.property('visible'))
+        clear_dialog = window.findChild(QObject, 'clearHistoryDialog')
+        history_count = controller.historyCount
+        QMetaObject.invokeMethod(clear_dialog, 'open')
+        capture('19-history-confirmation')
+        QMetaObject.invokeMethod(clear_dialog.findChild(QObject, 'dialogCancel'), 'clicked')
+        wait_for(lambda: not clear_dialog.property('visible'))
+        assert controller.historyCount == history_count
         window.setProperty('activePage', 'results')
         capture('09-small-results')
         window.setProperty('activePage', 'history')
@@ -158,7 +198,7 @@ def main():
         assert window.width() == 300
         controller.togglePet()
         assert window.width() == 1080
-        checks = ['reference-derived character asset + continuous 2.5D mesh', 'continuous listening and return', 'image import', 'same character retained across modes', 'transparent pet window', 'file retained across modes', 'reduced motion', '1080x720 layout', 'detection requires a selected file', 'reference_run not imported', 'large original/heatmap/comparison result area', 'no fabricated heatmaps', 'history filtering and reopening without duplication', 'synchronized comparison panning + fit reset', 'fade transition + rapid-click guard']
+        checks = ['reference-derived character asset + continuous 2.5D mesh', 'busy-bound listening and return', 'reduced motion stops listening without cancelling detection', 'styled dialogs accept/reject; history cancel preserves records', 'model dropdown opens by mouse and closes by Escape', 'image import', 'same character retained across modes', 'transparent pet window', 'file retained across modes', 'reduced motion', '1080x720 layout', 'technical details only in settings; experimental versions initially collapsed', 'detection requires a selected file', 'reference_run not imported', 'large original/heatmap/comparison result area', 'no fabricated heatmaps', 'history filtering and reopening without duplication', 'synchronized comparison panning + fit reset', 'fade transition + rapid-click guard']
         ffmpeg = shutil.which('ffmpeg')
         if ffmpeg:
             fixture_video = Path(temporary) / 'preview.mp4'

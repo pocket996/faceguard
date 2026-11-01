@@ -22,11 +22,15 @@ void main() {
     p.x += (uv.x - 0.59) * itemSize.x * 0.009 * breath * body;
     p.y -= itemSize.y * 0.003 * breath * body;
     vec2 pivot = itemSize * vec2(0.60, 0.49);
-    float angle = listen * 0.18 + acknowledge * 0.055 + gaze * 0.018 * (1.0 - still);
+    float angle = listen * (0.19 + 0.012 * sin(phase * 0.75)) + acknowledge * 0.055 + gaze * 0.018 * (1.0 - still);
     vec2 d = p - pivot;
     vec2 turned = vec2(cos(angle) * d.x - sin(angle) * d.y,
                        sin(angle) * d.x + cos(angle) * d.y);
     p += (turned - d + vec2(itemSize.x * 0.015, itemSize.y * 0.075) * listen) * head;
+    // Lower the upright ear toward the head while listening, with a soft local blend.
+    vec2 earUV = (uv - vec2(0.545, 0.085)) / vec2(0.085, 0.12);
+    float ear = exp(-dot(earUV, earUV) * 2.0);
+    p += vec2(-itemSize.x * 0.024, itemSize.y * 0.04) * ear * listen;
     float tail = (1.0 - smoothstep(0.27, 0.42, uv.x)) * smoothstep(0.34, 0.53, uv.y)
                  * (1.0 - smoothstep(0.85, 0.98, uv.y));
     p.x += sin(phase * 0.95) * itemSize.x * 0.012 * tail * (1.0 - still);
