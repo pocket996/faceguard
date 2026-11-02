@@ -1,4 +1,5 @@
 """Independent raw-image parity, routing, no-face, and held-out user GPT regression."""
+from project_io import resolve_data_path, data_location
 import argparse
 import csv
 import hashlib
@@ -21,28 +22,28 @@ from train_generation import audit
 
 def materialize_raw(row, target):
     if row.get('archive_member'):
-        with zipfile.ZipFile(row['raw_path']) as archive:
+        with zipfile.ZipFile(resolve_data_path(row['raw_path'])) as archive:
             target.write_bytes(archive.read(row['archive_member']))
     else:
-        target.write_bytes(Path(row['raw_path']).read_bytes())
+        target.write_bytes(resolve_data_path(row['raw_path']).read_bytes())
     return target
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--experiment', choices=['single', 'joint'], default='single')
-    parser.add_argument('--user-image', type=Path, help='Optional local regression photo; never used for training or threshold selection')
+    parser.add_argument('--user-image', type=resolve_data_path, help='Optional local regression photo; never used for training or threshold selection')
     options = parser.parse_args()
     start = time.monotonic()
     torch.set_num_threads(4)
     __import__('cv2').setNumThreads(1)
-    out = HERE / ('artifacts/generation/joint' if options.experiment == 'joint' else 'artifacts/generation')
+    out = resolve_data_path(HERE / ('artifacts/generation/joint' if options.experiment == 'joint' else 'artifacts/generation'))
     official_archives = {'flux-seed.zip': '87fd189e875d11f6f09269ad1d140afc',
                          'sd35-seed.zip': '4e9b2531444ec20b7394d0f194111f7d'}
     for filename, expected in official_archives.items():
-        with (HERE.parent / 'data/raw/fairfacegen' / filename).open('rb') as stream:
+        with (resolve_data_path(HERE.parent / 'data/raw/fairfacegen' / filename)).open('rb') as stream:
             assert hashlib.file_digest(stream, 'md5').hexdigest() == expected
-    manifest = out / 'manifest.csv' if options.experiment == 'joint' else HERE / 'data/generation_manifest.csv'
+    manifest = out / 'manifest.csv' if options.experiment == 'joint' else resolve_data_path(HERE / 'data/generation_manifest.csv')
     with manifest.open(encoding='utf-8', newline='') as stream:
         rows = list(csv.DictReader(stream))
     audit(rows, allow_sd35_training=options.experiment == 'joint')
@@ -54,7 +55,7 @@ def main():
                   sd35_protocol='grouped train/val/test; NOT unseen' if options.experiment == 'joint' else 'excluded from train and val')
     analyzer = GenerationPredictor(checkpoint=out / 'model.pt')
     predictor = analyzer
-    examples = HERE / ('data/examples/joint' if options.experiment == 'joint' else 'data/examples')
+    examples = resolve_data_path(HERE / ('data/examples/joint' if options.experiment == 'joint' else 'data/examples'))
     examples.mkdir(parents=True, exist_ok=True)
     for label in ('0', '1'):
         row = next(r for r in rows if r['split'] == 'test' and r['label'] == label
@@ -82,7 +83,7 @@ def main():
     assert delta < 1e-3, delta
     checks['cpu_gpu_probability_error'] = delta
     # Independent real video-frame source; report FPR only, not a fake/real AUC.
-    with (HERE.parent / 'data/manifests/ffpp-frames-full-93e2b370610e.csv').open(encoding='utf-8', newline='') as stream:
+    with (resolve_data_path(HERE.parent / 'data/manifests/ffpp-frames-full-93e2b370610e.csv')).open(encoding='utf-8', newline='') as stream:
         ffpp = list(csv.DictReader(stream))
     originals = {}
     for row in ffpp:
@@ -90,7 +91,7 @@ def main():
             originals.setdefault(row['parent_video_id'], row)
     tensors = []
     for row in originals.values():
-        with Image.open(HERE.parent / row['path']) as source:
+        with Image.open(resolve_data_path(HERE.parent / row['path'])) as source:
             tensors.append(image_transform()(canonical_face(source.convert('RGB'))))
     values = []
     with torch.inference_mode():

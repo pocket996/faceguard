@@ -1,4 +1,5 @@
 """Frozen ImageNet ResNet18 + trained logistic head. No test-driven tuning."""
+from project_io import resolve_data_path, data_location
 import argparse
 from collections import Counter, defaultdict
 import csv
@@ -31,7 +32,7 @@ class Frames(Dataset):
 
     def __getitem__(self, index):
         row = self.rows[index]
-        with Image.open(PROJECT / row['path']) as image:
+        with Image.open(resolve_data_path(PROJECT / row['path'])) as image:
             image = image.convert('RGB')
             pixel_hash = __import__('hashlib').sha256(image.tobytes()).hexdigest()
             tensor = self.transform(image)
@@ -47,8 +48,8 @@ def aggregate(rows, probabilities):
                  score=float(np.mean([p for _, p in v])), frames=len(v)) for k, v in sorted(groups.items())]
 
 
-def select_threshold(y, p):
-    fpr, tpr, thresholds = roc_curve(y, p)
+def select_threshold(y, p, sample_weight=None):
+    fpr, tpr, thresholds = roc_curve(y, p, sample_weight=sample_weight)
     valid = np.isfinite(thresholds) & (thresholds >= 0) & (thresholds <= 1)
     indices = np.flatnonzero(valid)
     return float(thresholds[indices[np.argmax((tpr - fpr)[indices])]])
@@ -67,7 +68,7 @@ def metrics(y, p, threshold):
 
 
 def write_csv(path, rows):
-    with Path(path).open('w', encoding='utf-8-sig', newline='') as stream:
+    with resolve_data_path(path).open('w', encoding='utf-8-sig', newline='') as stream:
         writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
@@ -75,7 +76,7 @@ def write_csv(path, rows):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--manifest', type=Path, default=PROJECT / 'data/manifests/ffpp-frames-full-93e2b370610e.csv')
+    parser.add_argument('--manifest', type=resolve_data_path, default=resolve_data_path(PROJECT / 'data/manifests/ffpp-frames-full-93e2b370610e.csv'))
     parser.add_argument('--batch-size', type=int, default=96)
     parser.add_argument('--workers', type=int, default=2)
     parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
@@ -89,8 +90,8 @@ def main():
     torch.set_num_threads(4)
     cv = __import__('cv2')
     cv.setNumThreads(1)
-    torch.hub.set_dir(str(HERE / 'weights/torch'))
-    out = HERE / 'artifacts'
+    torch.hub.set_dir(str(resolve_data_path(HERE / 'weights/torch')))
+    out = resolve_data_path(HERE / 'artifacts')
     out.mkdir(exist_ok=True)
     rows = load_rows(args.manifest)
     fingerprint = digest(args.manifest)
@@ -183,7 +184,7 @@ def main():
     checkpoint = dict(backbone={k: v.cpu() for k, v in model.state_dict().items()},
         head=head.state_dict(), video_threshold=video_threshold, frame_threshold=frame_threshold,
         model_name='resnet18_frozen_logistic', seed=42, manifest_sha256=fingerprint,
-        yunet_sha256=digest(HERE / 'weights/face_detection_yunet_2023mar.onnx'),
+        yunet_sha256=digest(resolve_data_path(HERE / 'weights/face_detection_yunet_2023mar.onnx')),
         training_scope='FF++ c23 four known manipulation methods',
         selected_C=float(best.C), feature_normalization='ImageNet', input_size=224)
     torch.save(checkpoint, out / 'model.pt')

@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "id": "dff-sd15-v1",
+      "label": "SD1.5 微调 · 实验版",
+      "file": "dff-sd15-v1.pt",
+      "sha256": "b71273f6bbd089152af4407fc349f50e3554d93e53318b64cd8aac3db4ec65d6",
+      "size": 44777611,
+      "threshold": 0.6774183213710785,
+      "selection": "Epoch 5 selected by validation only",
+      "scope": "DFF SD1.5 + FLUX/SD3.5; GAN development remains 0/100 detected",
+      "source_completion_sha256": "4f63a223ed85913b62ffa5648589c34b90e19fbcd43de332a11f0a04c90860c5",
+      "notice": "主要改善 SD1.5；本次 GPT 肖像仍漏检，StyleGAN 覆盖不足。"
+    },
+    {
+      "id": "gpt-sd15-v1",
+      "label": "GPT1 + SD1.5 · 高敏感实验版",
+      "file": "gpt-sd15-v1.pt",
+      "sha256": "f020512a834a838c6fee9781fa037fa8b71bfdbb1ac6b5bc8507b280d80fdc87",
+      "size": 44777739,
+      "threshold": 0.03806435689330101,
+      "selection": "Epoch 1 selected by validation source/group balanced AUC; threshold from validation only",
+      "scope": "GPT1 train 93 / val 25; no GPT1.5/GPT2/nano/user image used for fitting or threshold selection; observed regression only",
+      "notice": "更敏感但误报明显增加：DFF 真图误报约 7.4%；跨版本 GPT 与 StyleGAN 仍会漏检。",
+      "source_completion_sha256": "d3778e33a64dffc3919dbbe936b62e0fb18cdcf253050555d0cd44501ac95a2f"
+    },
+    {
+      "id": "gpt-low-fpr-v1",
+      "label": "GPT联合 · 低误报实验版",
+      "file": "gpt-low-fpr-v1.pt",
+      "sha256": "97f9c89bba7dd65bfc47249e33f25eb8a596542540451b6bc10a70e6e85a67a8",
+      "size": 44787339,
+      "threshold": 0.2556876689195633,
+      "selection": "Existing candidates ranked by GPT group recall at overall validation FPR <=2%; no new full training",
+      "scope": "Validation 145/7265 real false positives; historical test 167/7144. Cached-score replay verified with raw CPU parity; same source weights.",
+      "notice": "验证整体真图误报约2%，历史测试约2.34%；更保守，GPT仍会漏检，老人肖像亦未检出。",
+      "source_completion_sha256": "8db7a353ddb86483284f168ec68f90e3f2bafc0aaaddcf5e98651b22fd2c547b"
+    },
+    {
+      "id": "gpt-low-fpr-20261101",
+      "label": "GPT联合 · 低误报训练版（11-01）",
+      "file": "gpt-low-fpr-20261101.pt",
+      "sha256": "f387cd1c6613ae0ec74df2791b2c8fbdfc409f33b89dc77eac19da9416240c14",
+      "size": 44788363,
+      "threshold": 0.40325649082660675,
+      "selection": "Completed 3 full epochs; epoch 2 selected against 3 existing candidates by validation FPR-budgeted GPT recall and generator recall; no regression-based selection",
+      "scope": "GPT1 training 93 / validation 25, same frozen dataset; original test/external sets are historical regression",
+      "notice": "完整训练3轮，验证整体误报约2%，历史测试约2.25%；跨版本GPT与StyleGAN仍会漏检。",
+      "training_completed_epochs": 3,
+      "selected_training_epoch": 2,
+      "source_completion_sha256": "c87ed270125652b8bdade997769269fdc7645e29dc2d9c368f019258746de5f8"
+    }
+  ]
+}

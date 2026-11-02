@@ -1,0 +1,2 @@
+# Official desktop UI, separate from training / reference_run.
+PySide6==6.8.3

@@ -1,0 +1,2 @@
+# Preserve model resources and manifest-checked files byte for byte on every OS.
+weights/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

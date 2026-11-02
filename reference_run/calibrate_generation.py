@@ -1,4 +1,5 @@
 """Use the midpoint of the optimal validation decision interval, without test tuning."""
+from project_io import resolve_data_path, data_location
 import argparse
 import csv
 import json
@@ -17,7 +18,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--experiment', choices=['single', 'joint'], default='single')
     options = parser.parse_args()
-    out = HERE / ('artifacts/generation/joint' if options.experiment == 'joint' else 'artifacts/generation')
+    out = resolve_data_path(HERE / ('artifacts/generation/joint' if options.experiment == 'joint' else 'artifacts/generation'))
     state = torch.load(out / 'model.pt', map_location='cpu', weights_only=True)
     if state.get('threshold_strategy') == 'Midpoint of optimal validation balanced-accuracy interval':
         print('This checkpoint already has its validation-only final threshold', flush=True)
@@ -64,7 +65,7 @@ def main():
         for row, value in zip(rows, probabilities):
             row['prediction'] = int(value >= threshold)
         write_csv(path, rows)
-    manifest = out / 'manifest.csv' if options.experiment == 'joint' else HERE / 'data/generation_manifest.csv'
+    manifest = out / 'manifest.csv' if options.experiment == 'joint' else resolve_data_path(HERE / 'data/generation_manifest.csv')
     with manifest.open(encoding='utf-8', newline='') as stream:
         test = [r for r in csv.DictReader(stream) if r['split'] == 'test']
     args = argparse.Namespace(batch_size=48, workers=2, device='cuda' if torch.cuda.is_available() else 'cpu')

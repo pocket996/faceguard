@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "installed_at_beijing": "2026-10-31T17:07:43.082685+08:00",
+  "selection": "Stable FLUX/SD3.5 joint generation + FF++ fully finetuned manipulation; experimental candidates are not activated",
+  "files": {
+    "generation.pt": {
+      "sha256": "9717cf846c62846331061158c42173ada9ff1d105b8239b507cfe41679565a29",
+      "size": 44777291,
+      "copied_from": "D:\\faceguard\\reference_run\\artifacts\\generation\\joint\\model.pt"
+    },
+    "manipulation.pt": {
+      "sha256": "53c0edb0ceb076e23aa1d738b549e111176a5ddf1e89fa1cd21c9262381c3b7b",
+      "size": 44784715,
+      "copied_from": "D:\\faceguard\\reference_run\\artifacts\\model_finetuned.pt"
+    },
+    "yunet.onnx": {
+      "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+      "size": 232589,
+      "copied_from": "D:\\faceguard\\reference_run\\weights\\face_detection_yunet_2023mar.onnx"
+    },
+    "video_policy.json": {
+      "sha256": "519053d3c26e311d21fd21acb9b8b770d77b9f30c50238ba6106347c61e14254",
+      "size": 713,
+      "copied_from": "D:\\faceguard\\reference_run\\artifacts\\video_review\\policy.json"
+    },
+    "YuNet-LICENSE.txt": {
+      "sha256": "c83b8120c50ccbd4c4f96edf53141bdd566ebb8f8e9227e415326aa1b1aba958",
+      "size": 1085,
+      "copied_from": "D:\\faceguard\\weights\\YuNet-LICENSE.txt"
+    }
+  },
+  "models": {
+    "generation.pt": {
+      "model_name": "resnet18_generation",
+      "selected_epoch": 5,
+      "frame_threshold": 0.7077365219593048,
+      "video_threshold": 0.7077365219593048,
+      "seed": 2026,
+      "manifest_sha256": "c711cd48ca12ef99a504607b76ba64a9657cfe508a384ac6af98810559775594",
+      "yunet_sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+      "preprocessing": "generation128_jpeg90",
+      "training_generators": [
+        "FLUX.1-dev",
+        "Stable Diffusion 3.5"
+      ],
+      "real_sources": [
+        "LFW",
+        "FFHQ-256 mirror subset"
+      ],
+      "training_scope": "Experimental whole-face generation detector; GPT not represented in training",
+      "task": "whole_face_generation",
+      "threshold_strategy": "Midpoint of optimal validation balanced-accuracy interval"
+    },
+    "manipulation.pt": {
+      "model_name": "resnet18_full_finetune",
+      "seed": 42,
+      "selected_epoch": 4,
+      "video_threshold": 0.49754807935096323,
+      "frame_threshold": 0.6040773391723633,
+      "manifest_sha256": "673a9268e70537fa435c9d53a5d52e7feb1fb04df11fdc01730b1208e7f4ebcc",
+      "yunet_sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+      "input_size": 224,
+      "feature_normalization": "ImageNet",
+      "training_scope": "FF++ c23 four known face manipulation methods"
+    }
+  },
+  "reference_preserved": true
+}

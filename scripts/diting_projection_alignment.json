@@ -1,0 +1,32 @@
+{
+  "description": "Manual silhouette and feature alignment for reconstruction-v2 at the fixed left review camera. This is a local shape study, not final anatomy approval.",
+  "render_size": [1000, 1120],
+  "radius_pixels": 155,
+  "landmarks": [
+    {"name":"horn_tip","from":[730,103],"to":[720,134]},
+    {"name":"horn_root","from":[750,229],"to":[729,234]},
+    {"name":"folded_ear_tip","from":[938,213],"to":[884,245]},
+    {"name":"folded_ear_top","from":[847,163],"to":[838,202]},
+    {"name":"nose","from":[805,337],"to":[782,341]},
+    {"name":"near_eye","from":[688,288],"to":[668,301]},
+    {"name":"far_eye","from":[834,304],"to":[811,318]},
+    {"name":"chin","from":[766,426],"to":[766,445]},
+    {"name":"tail_tuft_top","from":[242,505],"to":[230,579]},
+    {"name":"tail_tuft_outer","from":[350,599],"to":[334,649]},
+    {"name":"tail_outer_curve","from":[100,692],"to":[104,723]},
+    {"name":"tail_root","from":[200,872],"to":[200,867]},
+    {"name":"upright_ear_tip","from":[535,113],"to":[535,113]},
+    {"name":"upright_ear_root","from":[470,237],"to":[470,237]},
+    {"name":"mane_lower","from":[710,579],"to":[710,579]},
+    {"name":"shoulder","from":[480,618],"to":[480,618]},
+    {"name":"near_front_paw","from":[632,1027],"to":[632,1027]},
+    {"name":"far_front_paw","from":[908,1026],"to":[908,1026]},
+    {"name":"rear_paw","from":[363,1017],"to":[363,1017]},
+    {"name":"thigh","from":[462,855],"to":[462,855]},
+    {"name":"body_center","from":[500,750],"to":[500,750]},
+    {"name":"corner_tl","from":[0,0],"to":[0,0]},
+    {"name":"corner_tr","from":[1000,0],"to":[1000,0]},
+    {"name":"corner_bl","from":[0,1120],"to":[0,1120]},
+    {"name":"corner_br","from":[1000,1120],"to":[1000,1120]}
+  ]
+}

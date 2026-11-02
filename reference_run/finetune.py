@@ -1,4 +1,5 @@
 """Fine-tune all ResNet18 layers; choose checkpoints using validation video AUC only."""
+from project_io import resolve_data_path, data_location
 import argparse
 from collections import defaultdict
 import json
@@ -27,7 +28,7 @@ class Images(Dataset):
 
     def __getitem__(self, i):
         row = self.rows[i]
-        with Image.open(PROJECT / row['path']) as image:
+        with Image.open(resolve_data_path(PROJECT / row['path'])) as image:
             return self.transform(image.convert('RGB')), float(row['label'])
 
 
@@ -57,8 +58,8 @@ def main():
     torch.set_num_threads(4)
     __import__('cv2').setNumThreads(1)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    out = HERE / 'artifacts'
-    manifest = PROJECT / 'data/manifests/ffpp-frames-full-93e2b370610e.csv'
+    out = resolve_data_path(HERE / 'artifacts')
+    manifest = resolve_data_path(PROJECT / 'data/manifests/ffpp-frames-full-93e2b370610e.csv')
     rows = load_rows(manifest)
     # Require completed decoded-image audit from the frozen baseline.
     meta = json.loads((out / 'features.json').read_text(encoding='utf-8'))

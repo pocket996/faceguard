@@ -1,4 +1,5 @@
 """Inspect public source manifests without downloading a whole dataset."""
+from project_io import resolve_data_path, data_location
 import concurrent.futures
 import io
 import json
@@ -27,7 +28,7 @@ def main():
     ]
     results = dict(concurrent.futures.ThreadPoolExecutor(3).map(fetch, urls))
     for archive in ('flux-seed.zip', 'sd35-seed.zip'):
-        with zipfile.ZipFile(ROOT.parent / 'data/raw/fairfacegen' / archive) as stream:
+        with zipfile.ZipFile(resolve_data_path(ROOT.parent / 'data/raw/fairfacegen' / archive)) as stream:
             member = next(n for n in stream.namelist() if n.endswith('.jpg'))
             with Image.open(io.BytesIO(stream.read(member))) as image:
                 results[archive] = dict(member=member, size=image.size)
