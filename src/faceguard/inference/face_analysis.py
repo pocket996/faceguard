@@ -42,6 +42,7 @@ class GenerationPredictor:
             else:
                 detected, count = detect_face_crops(cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR), self.detector)
         result = dict(path=str(path), media_type='image', task='whole_face_generation',
+            inference_device=str(self.device),
             faces=len(detected), detected_faces=count, unanalysed_faces=count - len(detected),
             sampled_frames=1, no_face_frames=int(not detected),
             scope='Experimental whole-face generation detector; uncalibrated; see experiment report for evaluation scope',

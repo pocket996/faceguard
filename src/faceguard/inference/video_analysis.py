@@ -181,6 +181,7 @@ def analyze_video(predictor, path, progress=None):
     flagged = any(f['score'] >= frame_threshold for row in observations for f in row['faces'])
     gaps = np.diff([r['frame_index'] for r in observations])
     result = dict(path=str(path), media_type='video', task='face_manipulation', sampling='adaptive_review',
+        inference_device=str(predictor.device),
         model_sha256=getattr(predictor, 'model_sha256', None),
         score=None, decision='no_face' if not seen_faces else 'video_results',raw_frame_alert=flagged,
         faces=seen_faces, face_frames=sum(bool(r['faces']) for r in observations),

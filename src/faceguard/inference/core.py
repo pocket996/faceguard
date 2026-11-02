@@ -126,7 +126,9 @@ class Predictor:
             finally:
                 cap.release()
             kind = 'video'
-        result = dict(path=str(path), media_type=kind, faces=len(images),                      model_sha256=getattr(self, 'model_sha256', None),
+        result = dict(path=str(path), media_type=kind, faces=len(images),
+                      inference_device=str(self.device),
+                      model_sha256=getattr(self, 'model_sha256', None),
                       sampled_frames=attempted, no_face_frames=skipped,
                       scope='FF++ c23 face manipulation baseline; uncalibrated score')
         if not images:

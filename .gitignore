@@ -1,7 +1,7 @@
 .venv/
 __pycache__/
 data/
-weights/
+# Runtime and candidate model weights are versioned with the application.
 outputs/
 artifacts/
 .vscode/

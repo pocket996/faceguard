@@ -71,7 +71,7 @@ def main():
         character = window.findChild(QObject, 'ditingCharacter')
         assert character is not None
         assert character.property('assetReady')
-        assert '2.5D' in character.property('representation')
+        assert '23-joint skinned 3D' in character.property('representation')
         assert not window.findChild(QObject, 'startDetection').property('enabled')
         assert not any('reference_run' in str(getattr(m, '__file__', '')) for m in list(sys.modules.values()) if m)
         controller._busy = True
@@ -160,6 +160,15 @@ def main():
         selector = window.findChild(QObject, 'generationModelSelector')
         assert not selector.property('visible'), 'Experimental versions must be collapsed initially'
         capture('13-settings')
+        reduced_switch = visual_items('reducedMotionSwitch')[0]
+        reduced_before = controller.reducedMotion
+        switch_point = reduced_switch.mapToScene(QPointF(20, reduced_switch.height() / 2)).toPoint()
+        QTest.mouseClick(window, Qt.LeftButton, Qt.NoModifier, switch_point)
+        wait_for(lambda: controller.reducedMotion != reduced_before)
+        assert reduced_switch.property('checked') == controller.reducedMotion
+        QTest.mouseClick(window, Qt.LeftButton, Qt.NoModifier, switch_point)
+        wait_for(lambda: controller.reducedMotion == reduced_before)
+        assert reduced_switch.property('checked') == controller.reducedMotion
         QMetaObject.invokeMethod(advanced, 'clicked')
         QTest.qWait(300)
         assert selector.property('visible')
@@ -198,7 +207,7 @@ def main():
         assert window.width() == 300
         controller.togglePet()
         assert window.width() == 1080
-        checks = ['reference-derived character asset + continuous 2.5D mesh', 'busy-bound listening and return', 'reduced motion stops listening without cancelling detection', 'styled dialogs accept/reject; history cancel preserves records', 'model dropdown opens by mouse and closes by Escape', 'image import', 'same character retained across modes', 'transparent pet window', 'file retained across modes', 'reduced motion', '1080x720 layout', 'technical details only in settings; experimental versions initially collapsed', 'detection requires a selected file', 'reference_run not imported', 'large original/heatmap/comparison result area', 'no fabricated heatmaps', 'history filtering and reopening without duplication', 'synchronized comparison panning + fit reset', 'fade transition + rapid-click guard']
+        checks = ['reference-derived 23-joint skinned 3D character', 'busy-bound listening and return', 'reduced motion stops listening without cancelling detection', 'styled dialogs accept/reject; history cancel preserves records', 'model dropdown opens by mouse and closes by Escape', 'image import', 'same character retained across modes', 'transparent pet window', 'file retained across modes', 'reduced motion', '1080x720 layout', 'technical details only in settings; experimental versions initially collapsed', 'detection requires a selected file', 'reference_run not imported', 'large original/heatmap/comparison result area', 'no fabricated heatmaps', 'history filtering and reopening without duplication', 'synchronized comparison panning + fit reset', 'fade transition + rapid-click guard']
         ffmpeg = shutil.which('ffmpeg')
         if ffmpeg:
             fixture_video = Path(temporary) / 'preview.mp4'

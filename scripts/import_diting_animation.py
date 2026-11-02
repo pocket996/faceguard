@@ -36,11 +36,12 @@ def main():
     property bool ready: false
     property var bindTransforms: []
     property var transitionFrom: []
+    property var transitionTo: []
     function snapshot(joint) {
         var p=joint.position, q=joint.rotation, s=joint.scale
         return {position: Qt.vector3d(p.x,p.y,p.z), rotation: Qt.quaternion(q.scalar,q.x,q.y,q.z), scale: Qt.vector3d(s.x,s.y,s.z)}
     }
-    function prepareTransition() {
+    function prepareTransition(targetName, targetTime) {
         transitionFrom = []
         var changed = false
         for (var i = 0; i < skin.joints.length; ++i) {
@@ -54,13 +55,19 @@ def main():
                 Math.abs(joint.rotation.y - rest.rotation.y) +
                 Math.abs(joint.rotation.z - rest.rotation.z) > 0.00001) changed = true
         }
+        if (targetName !== undefined) {
+            resetAndSelect(targetName)
+            clipTime = targetTime || 0
+            transitionTo = []
+            for (var j = 0; j < skin.joints.length; ++j) transitionTo.push(snapshot(skin.joints[j]))
+        } else transitionTo = bindTransforms
         clipName = ""
         blendToBind(0)
         return changed
     }
     function blendToBind(t) {
         for (var i = 0; i < transitionFrom.length; ++i) {
-            var from = transitionFrom[i], to = bindTransforms[i], joint = skin.joints[i]
+            var from = transitionFrom[i], to = transitionTo[i], joint = skin.joints[i]
             joint.position = from.position.times(1-t).plus(to.position.times(t))
             joint.scale = from.scale.times(1-t).plus(to.scale.times(t))
             var a = from.rotation, b = to.rotation
@@ -81,6 +88,13 @@ def main():
         }
         clipTime = 0
         clipName = name
+    }
+    function breathe(phase) {
+        for (var i = 0; i < skin.joints.length; ++i) {
+            if (skin.joints[i].objectName !== "Chest") continue
+            var rest = bindTransforms[i].scale, wave = Math.sin(phase)
+            skin.joints[i].scale = Qt.vector3d(rest.x*(1+.009*wave), rest.y*(1+.006*wave), rest.z*(1+.012*wave))
+        }
     }
     Component.onCompleted: {
         for (var i = 0; i < skin.joints.length; ++i) {

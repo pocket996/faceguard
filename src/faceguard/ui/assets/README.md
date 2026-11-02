@@ -1,6 +1,39 @@
 # 谛听角色展示资产
 
-## 工作台水墨庭院（2026-11-01）
+## 当前版本：全屏湖面与 23 骨骼角色（2026-11-01）
+
+工作台背景已从中央画框扩展为全窗口水墨湖面，延伸到左右面板后方。用户确认保留谛听端坐造型；移除石台，以脚掌接触暗部、脚边涟漪和实时淡倒影衔接水面。背景绘画不包含角色，水岸抬高到画面上半部，保证角色脚下为连续水面。导航与操作区使用浅色遮罩保持文字可读；桌宠使用同一骨骼角色，隐藏水面效果。
+
+正式背景为 `ink-lake-v2.png`（1672 × 941，2,620,768 字节，SHA-256 `3be9f5ad76375341dea92d8671c1f2c6fe0c3cf7e0713ce3ab8ff3be4302aeed`），使用内置 **imagegen** 在旧庭景上非破坏编辑两轮，原始生成文件保留，正式副本位于本目录。无需生成服务或本机 outputs 即可运行。
+
+最终一轮提示词（上一轮将中央石地改为水面，本轮调整水岸构图）：
+
+```text
+Use case: precise-object-edit. Edit this existing garden artwork to fix its composition for a fullscreen app with a character placed at 60 percent image height.
+Keep the same pavilion, moon gate, mountains, pine, warm ivory/celadon palette and painterly detail.
+CRITICAL COMPOSITION CHANGE: the unobstructed lake water MUST begin at 48 percent of image height and fill the ENTIRE BOTTOM HALF from the center to both sides. The mountains, central shoreline, island rocks, garden walls, pavilion and moon gate must ALL move into the TOP HALF of the image; scale them down vertically/recede them into the distance as necessary. No rocks, trees, islands or shore objects anywhere in the central 65 percent of the lower half. The central foreground should be clean continuous still pale celadon water from halfway down all the way to the bottom edge. Only a few very small bamboo leaves may frame the very bottom extreme corners. Preserve fine ink-wash reflections and horizontal ripples in the water. No added character, no animals, no pedestal, no land under the character, no text, no UI, no logo, no borders. Full landscape artwork edge to edge.
+```
+
+`scripts/complete_diting_acting.py` 在 v5 场景上增加双眉和下颌三根骨骼，局部平滑蒙皮并重新限定每顶点最多四个归一权重；保留原网格、材质、双眼和眼睑，强化头颈低垂 / 侧耳的倾听动作。v6 共 23 根骨骼，三组 30 fps 动作分别为 Idle 181 帧、Respond 73 帧、Listen 121 帧。Blender 对全部 375 帧检查：脚掌位移最大为 0，起止几何差为 0，局部边长比第 99 百分位最大约 1.214；三个闭眼峰值的双眼瞳孔均被眼睑遮挡。这些是固定坐姿的形变检查，不等于所有自交或电影级外观验收。
+
+可编辑场景、GLB 和逐帧审计保存于 `outputs/diting-3d/animation-v6/`；GLB SHA-256 为 `cfca3f6e88687804608a49d7f3c701bc3c2949024012c7cc47ea55b97eb58222`。运行资源已导入 `diting-motion-v6/`，工作台、桌宠、设置立体预览都使用这组真实蒙皮。工作台由 `../DitingPerformance.qml` 保存打断瞬间的骨骼姿态，插值 340 ms 后进入目标动作；检测中先进入倾听，再在中段保持细微耳尾活动与呼吸，结束 / 失败 / 取消后平滑返回待机。这里是姿态过渡与片段播放，没有宣称速度连续的全身动作混合系统。
+
+`../DitingAvatar.qml` 使用 Qt Quick 3D 透明场景绘制角色；`ShaderEffectSource` 直接复用同帧渲染，由 `water-reflection.frag` / `.qsb` 生成压缩、衰减、微扰的倒影，未另起角色动画时钟。脚边接触暗部与低对比涟漪由 Canvas 绘制；这些为面向主视角的水面融合效果，不是完整物理水体或三维反射追踪。减少动态效果时骨骼、水纹、倒影扰动和背景视差全部静止，检测继续；离开工作台暂停角色并卸载背景，透明桌宠不显示水面。
+
+制作与验证命令（在仓库根目录）：
+
+```powershell
+& 'D:/tools/blender/blender-4.5.15-windows-x64/blender.exe' -b --python-exit-code 1 --python scripts/complete_diting_acting.py -- --scene outputs/diting-3d/animation-v5/expressive/diting-expressive-v5.blend --face-report outputs/diting-3d/animation-v5/face-accepted/face-report.json --output outputs/diting-3d/animation-v6
+.venv/Scripts/python.exe scripts/import_diting_animation.py --asset outputs/diting-3d/animation-v6/DitingActingV6.glb --balsam .venv/Lib/site-packages/PySide6/balsam.exe --output src/faceguard/ui/assets/diting-motion-v6
+.venv/Scripts/pyside6-qsb.exe --glsl "100 es,120,150" --hlsl 50 --msl 12 -o src/faceguard/ui/shaders/water-reflection.frag.qsb src/faceguard/ui/shaders/water-reflection.frag
+.venv/Scripts/python.exe scripts/check_courtyard_ui.py --record
+.venv/Scripts/python.exe scripts/check_diting_motion_ui.py
+```
+
+截图、窗口检查与按真实时间录制的连续动作 GIF 位于 `outputs/ink-lake-v6-20261101/`，预览专项报告位于 `outputs/diting-3d/animation-v6/ui-check/`。建模与绑定已能支持当前坐姿交互，但张嘴 / 舌牙、完整面部表演、四足站立 / 行走 / IK 与跨窗口移动未完成；口鼻、折耳、闭眼褶皱和材质接缝仍需精修。其他电脑性能及用户外观验收不能由本机程序检查替代。以下为保留的历史制作记录，当前运行行为以本节为准。
+
+
+## 历史：石台水墨庭院（2026-11-01，已由湖面替换）
 
 正式工作台由 `../InkCourtyard.qml` 组合水墨庭景远景图、Qt Quick 3D 实时三层石台、石纹材质与接触阴影。保留原谛听形象与检测时的俯耳动作；角色继续使用现有 2.5D，古建 / 远山为绘制的远景，不据此称完整古建筑三维建模或完整 3D 角色已完成。视差联动鼠标注视方向，减少动效时固定相机；进入结果 / 历史页或收为桌宠后卸载庭院，返回工作台重新加载。两侧操作区保留可读背景。
 
@@ -33,7 +66,7 @@ Use case: stylized-concept. Asset type: square seamless albedo/base-color textur
 
 > 从角色设定图左侧的大幅谛听提取单只完整端坐角色，忠实保留青玉虎首、成熟棕眼、雕刻古金独角、一立一垂的犬耳、细密象牙白云鬃、金边龙鳞、麒麟足与云纹狮尾；保持同一三分之四视角和原有陶玉材质。真实透明背景，无文字、无界面、无场景，不做球体或卡通化重新设计。
 
-当前由 `DitingAvatar.qml` 及保留源码的 `shaders/diting.vert` / `diting.frag` 在同一张纹理上进行连续网格形变，实现呼吸、尾摆、点头和轻微侧倾。工作台 / 桌宠当前仍是同一张图的连续形变；设置中的立体预览已另接真实蒙皮角色，制作记录见下文第三至第五轮。完整精细角色仍在完善。
+历史 2.5D 版本由 `DitingAvatar.qml` 及保留源码的 `shaders/diting.vert` / `diting.frag` 在同一张纹理上进行连续网格形变，实现呼吸、尾摆、点头和轻微侧倾。该版本已由第六轮真实蒙皮替换，旧图与着色器保留供溯源；下面第三至第五轮内容也是对应制作当时的历史记录。
 
 2026-10-30：增加鼠标悬停时的小幅头部回应；减少动态效果时停用回应和连续形变，隐藏角色时暂停计时，重新显示后继续原动画相位。本轮未替换素材或新增 3D 模型。
 

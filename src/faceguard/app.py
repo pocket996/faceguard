@@ -15,7 +15,7 @@ from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QSystemTrayIcon
 
 from faceguard.history import HistoryStore
-from faceguard.detection import DetectionWorker, DetailPreviewWorker, task_summary, task_state, detail_records
+from faceguard.detection import DetectionWorker, DetailPreviewWorker, task_summary, task_state, detail_records, store_detail_heatmap
 from faceguard.model_registry import resource_status, generation_profiles
 from faceguard.data_locations import resolve_data_path
 from faceguard.reports import write_report
@@ -56,6 +56,8 @@ class AppController(QObject):
         self._history_id = None
         self._detail_url, self._detail_text = QUrl(), ''
         self._frame_url = QUrl()
+        self._heatmap_url, self._heatmap_status = QUrl(), '选择人脸后查看模型关注区域'
+        self._detail_busy, self._selected_detail, self._pending_detail = False, -1, None
         self._preview_workers, self._preview_token = [], None
         self._preview_directory = None
         self._engine_ready, self._engine_status = resource_status()
@@ -94,18 +96,45 @@ class AppController(QObject):
     detailPreviewUrl = Property(QUrl, lambda self: self._detail_url, notify=changed)
     selectedFrameUrl = Property(QUrl, lambda self: self._frame_url, notify=changed)
     selectedDetailText = Property(str, lambda self: self._detail_text, notify=changed)
+    heatmapUrl = Property(QUrl, lambda self: self._heatmap_url, notify=changed)
+    heatmapStatus = Property(str, lambda self: self._heatmap_status, notify=changed)
+    detailBusy = Property(bool, lambda self: self._detail_busy, notify=changed)
+    selectedDetailIndex = Property(int, lambda self: self._selected_detail, notify=changed)
 
     def _reset_detail(self):
+        for worker in self._preview_workers:
+            worker.cancel()
         self._detail_url, self._detail_text, self._preview_token = QUrl(), '', None
         self._frame_url = QUrl()
+        self._heatmap_url, self._heatmap_status = QUrl(), '选择人脸后查看模型关注区域'
+        self._detail_busy, self._selected_detail, self._pending_detail = False, -1, None
+
+    @Slot()
+    def ensureDetail(self):
+        if self._selected_detail < 0 and not self._busy and detail_records(self._result):
+            self.selectDetail(0)
+
+    @Slot()
+    def cancelDetail(self):
+        for worker in self._preview_workers:
+            worker.cancel()
+        self._preview_token, self._pending_detail = None, None
+        self._detail_busy = False
+        self._heatmap_status = '热力图计算已取消，可重新选择人脸'
+        self.changed.emit()
 
     @Slot(int)
     def selectDetail(self, index):
         records = detail_records(self._result)
-        if not 0 <= index < len(records):
+        if self._busy or not 0 <= index < len(records):
             return
-        # Bound outstanding decoders when repeatedly clicking frame rows.
+        # Keep only the most recent selection, with at most one decoder/model job.
         if self._preview_workers:
+            self._reset_detail()
+            self._pending_detail = index
+            self._detail_busy = True
+            self._heatmap_status = '正在切换人脸'
+            self.changed.emit()
             return
         signature = self._result.get('source_signature')
         try:
@@ -119,12 +148,17 @@ class AppController(QObject):
         self._detail_text = record['title'] + '\n' + record['text']
         self._detail_url = QUrl()
         self._frame_url = QUrl()
+        self._heatmap_url = QUrl()
+        self._selected_detail, self._detail_busy = index, True
+        self._heatmap_status = '正在计算模型关注区域'
         token = uuid4().hex
         self._preview_token = token
         if self._preview_directory is None:
             self._preview_directory = tempfile.TemporaryDirectory(prefix='faceguard-preview-')
         destination = Path(self._preview_directory.name) / (token + '.png')
-        worker = DetailPreviewWorker(self._url.toLocalFile(), record, destination)
+        worker = DetailPreviewWorker(self._url.toLocalFile(), record, destination,
+                                     explain=True, generation_profile=self._result.get('generation_model_profile', 'stable'),
+                                     source_signature=signature)
         self._preview_workers.append(worker)
         def ready(filename, frame_filename):
             if token == self._preview_token:
@@ -133,12 +167,35 @@ class AppController(QObject):
                 self.changed.emit()
         def failed(message):
             if token == self._preview_token:
+                self._heatmap_status = '热力图不可用：' + message
                 self.showError('人脸预览失败：' + message)
+        def heatmap_ready(filename, payload):
+            if token == self._preview_token:
+                self._heatmap_url = QUrl.fromLocalFile(filename)
+                positive = any(value > 0 for row in payload['grid'] for value in row)
+                self._heatmap_status = ('颜色表示支持“' + ('整脸生成' if record['task'] == 'generation' else '面部篡改')
+                                        + '”判断的关注强度；每张图独立归一化' if positive
+                                        else '所选人脸没有可显示的正向关注响应')
+                store_detail_heatmap(self._result, record, payload)
+                self._record_result(self._result, 'partial' if self._result.get('errors') else 'completed')
+                self.changed.emit()
+        def heatmap_failed(message):
+            if token == self._preview_token:
+                self._heatmap_status = '热力图不可用：' + message
+                self.changed.emit()
         def finished():
             self._preview_workers.remove(worker)
             worker.deleteLater()
+            if token == self._preview_token:
+                self._detail_busy = False
+                self.changed.emit()
+            if self._pending_detail is not None:
+                pending, self._pending_detail = self._pending_detail, None
+                self.selectDetail(pending)
         worker.ready.connect(ready)
         worker.failed.connect(failed)
+        worker.heatmapReady.connect(heatmap_ready)
+        worker.heatmapFailed.connect(heatmap_failed)
         worker.finished.connect(finished)
         worker.start()
         self.changed.emit()
@@ -263,6 +320,7 @@ class AppController(QObject):
 
     @Slot()
     def shutdown(self):
+        self._reset_detail()
         if self._worker:
             self._cancelling = True
             self._worker.cancel()

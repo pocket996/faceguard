@@ -13,7 +13,10 @@ Switch {
         border.color: control.activeFocus ? "#ad955f" : "transparent"
         Rectangle {
             x: control.checked ? 21 : 3; y: 3; width: 18; height: 18; radius: 9; color: "#fcfbf7"
-            Behavior on x { NumberAnimation { duration: controller.reducedMotion ? 0 : 140 } }
+            Behavior on x {
+                enabled: !controller.reducedMotion
+                NumberAnimation { duration: 140 }
+            }
         }
     }
     contentItem: Text {

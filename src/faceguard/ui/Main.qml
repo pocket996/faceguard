@@ -27,6 +27,7 @@ Window {
     function showPage(page) {
         player.pause()
         activePage = page
+        if (page === "results") controller.ensureDetail()
     }
     Shortcut { sequence: "Ctrl+O"; onActivated: controller.chooseFile("image") }
     Shortcut { sequence: "Ctrl+Shift+O"; onActivated: controller.chooseFile("video") }
@@ -36,7 +37,6 @@ Window {
     Connections {
         target: controller
         function onMediaOpened() {
-            resultsPage.heatmapSource = ""
             resultsPage.zoom = 1
             window.showPage("workspace")
         }
@@ -50,11 +50,23 @@ Window {
         border.color: "#e1dfd3"; border.width: 1
     }
 
+    Loader {
+        id: courtyardLoader
+        objectName: "courtyardLoader"
+        x: 1; y: 1; width: parent.width - 2; height: parent.height - 2
+        active: !window.pet && window.activePage === "workspace"
+        source: "InkCourtyard.qml"
+        onLoaded: {
+            item.reducedMotion = Qt.binding(function() { return controller.reducedMotion })
+            item.gaze = Qt.binding(function() { return creature.gaze })
+        }
+    }
+
     Rectangle {
         id: header
         visible: !window.pet
         x: 1; y: 1; width: parent.width - 2; height: 78
-        radius: 23; color: "#fcfbf7"
+        radius: 23; color: window.activePage === "workspace" ? "#d9fcfbf7" : "#fcfbf7"
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 24; color: parent.color }
         MouseArea { anchors.fill: parent; onPressed: window.startSystemMove(); onDoubleClicked: window.visibility === Window.Maximized ? window.showNormal() : window.showMaximized() }
         Row {
@@ -169,6 +181,11 @@ Window {
             }
         }
 
+        Rectangle {
+            x: mediaCard.x + mediaCard.width + 12; y: parent.height - 312
+            width: resultsCard.x - x - 12; height: 232
+            radius: 24; color: "#b8f8f6ee"
+        }
         Column {
             x: mediaCard.x + mediaCard.width + 16; y: parent.height - 297
             width: resultsCard.x - x - 16; spacing: 15
@@ -205,7 +222,7 @@ Window {
         onBackRequested: window.showPage("workspace")
     }
 
-    // A single source artwork and mesh are retained across workspace/pet modes.
+    // The same skinned character and motion state are retained across workspace/pet modes.
     Item {
         id: characterStage
         objectName: "characterStage"
@@ -214,52 +231,11 @@ Window {
         y: window.pet ? 38 : 173
         width: window.pet ? window.width : window.width - 660
         height: window.pet ? window.height - 90 : window.height - 482
-        Loader {
-            id: courtyardLoader
-            objectName: "courtyardLoader"
-            anchors.fill: parent
-            active: !window.pet && window.activePage === "workspace"
-            source: "InkCourtyard.qml"
-            onLoaded: {
-                item.reducedMotion = Qt.binding(function() { return controller.reducedMotion })
-                item.gaze = Qt.binding(function() { return creature.gaze })
-            }
-        }
-        Canvas {
-            anchors.horizontalCenter: parent.horizontalCenter; y: parent.height * (window.pet ? 0.78 : 0.83)
-            width: parent.width * (window.pet ? 0.68 : 0.35); height: parent.height * 0.09
-            onWidthChanged: requestPaint()
-            onHeightChanged: requestPaint()
-            onPaint: {
-                var ctx = getContext("2d"); ctx.reset()
-                ctx.scale(width / 2, height / 2); ctx.translate(1, 1)
-                var shade = ctx.createRadialGradient(0, 0, 0, 0, 0, 1)
-                shade.addColorStop(0, "rgba(69,91,61,0.16)"); shade.addColorStop(1, "rgba(69,91,61,0)")
-                ctx.fillStyle = shade; ctx.fillRect(-1, -1, 2, 2)
-            }
-        }
-        Canvas {
-            id: ripples; anchors.fill: parent; opacity: creature.listening * 0.8
-            property real phase: 0
-            NumberAnimation on phase { from: 0; to: 1; duration: 2400; loops: Animation.Infinite; running: controller.busy && !window.reduced }
-            onPhaseChanged: requestPaint()
-            onWidthChanged: requestPaint()
-            onHeightChanged: requestPaint()
-            onPaint: {
-                var ctx = getContext("2d"); ctx.reset()
-                for (var i = 0; i < 3; i++) {
-                    var p = (phase + i / 3) % 1
-                    ctx.strokeStyle = "rgba(104,150,125," + (1 - p) * 0.4 + ")"
-                    ctx.lineWidth = 2
-                    ctx.beginPath(); ctx.ellipse(width * 0.13 - p * 35, height * 0.72 - p * 16, 80 + p * 80, 22 + p * 34); ctx.stroke()
-                }
-            }
-        }
         DitingAvatar {
             id: creature
             objectName: "ditingCharacter"
             anchors.fill: parent
-            anchors.bottomMargin: window.pet ? 0 : parent.height * 0.07
+            waterSurface: !window.pet
             reducedMotion: controller.reducedMotion
             listening: controller.busy && !window.reduced ? 1 : 0
             motion: controller.busy ? "listening" : controller.fileName ? "ready" : "idle"
@@ -334,7 +310,7 @@ Window {
                 InfoCard { Layout.fillWidth: true; marker: "01"; title: "选一张照片，或一段视频"; body: "点击选择文件，也可以直接拖入工作台。照片支持放大，视频可静音预览。" }
                 InfoCard { Layout.fillWidth: true; marker: "02"; title: "点击检测，谛听俯耳倾听"; body: "辨析与倾听动作同时开始，结束后回到待机。右侧先显示结果概览，点击查看按钮再进入详细结果。" }
                 InfoCard { Layout.fillWidth: true; marker: "03"; title: "细看线索，保存报告"; body: "逐脸查看生成与篡改结果，视频可查看采样帧。报告默认 PDF，也可选 TXT；历史记录可重新打开。" }
-                Text { Layout.fillWidth: true; text: "未检出不代表真实，分数不是真假概率。热力图尚待实现；你仍可查看真实检测分数与人脸。"; wrapMode: Text.Wrap; font.pixelSize: 13; lineHeight: 1.5; color: "#8c744c" }
+                Text { Layout.fillWidth: true; text: "未检出不代表真实，分数不是真假概率。选择人脸可查看对应检测项目的关注热力图；颜色不代表精确篡改边界。"; wrapMode: Text.Wrap; font.pixelSize: 13; lineHeight: 1.5; color: "#8c744c" }
             }
         }
     }
@@ -439,7 +415,7 @@ Window {
             ColumnLayout {
                 id: technicalContent; width: parent.width; spacing: 12
                 InfoCard { Layout.fillWidth: true; marker: "◎"; title: "模型与媒体"; body: "当前生成模型：" + controller.generationModelLabel + "\n篡改模型：FF++ 基线。视频使用整段 16 帧基线与有采样上限的局部复核；短事件仍可能漏检。普通照片篡改结果仅作复核线索。" }
-                InfoCard { Layout.fillWidth: true; marker: "◇"; title: "能力与边界"; body: "工作台与桌宠使用同源 2.5D 连续形变，立体预览为 20 骨骼坐姿角色。完整面部表演、四足行走及热力图尚待完善。分数是模型倾向，不是真假概率。" }
+                InfoCard { Layout.fillWidth: true; marker: "◇"; title: "能力与边界"; body: "工作台、桌宠与立体预览均为 23 骨骼坐姿角色，支持眨眼、回应和检测倾听。热力图展示所选人脸的模型关注区域。张嘴表演与四足行走尚待完善。分数是模型倾向，不是真假概率。" }
                 Text { Layout.fillWidth: true; text: "PySide6 / Qt Quick · 本机 SQLite 历史 · PDF / TXT 报告\n独立推理模块与本地资源，不依赖参考项目运行。"; wrapMode: Text.Wrap; color: "#6c806e"; font.pixelSize: 12; lineHeight: 1.5 }
             }
         }

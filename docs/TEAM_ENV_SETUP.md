@@ -133,34 +133,37 @@ git remote -v
 
 ## 6. 环境好了，还能不能直接检测和训练？
 
-正式应用的检测入口现为根目录 `run_app.cmd` / `run_app.py`。完成前述推理依赖安装后，复制经核验的完整 `weights/runtime/`：`generation.pt`、`manipulation.pt`、`yunet.onnx`、`video_policy.json`、`YuNet-LICENSE.txt`、`manifest.json`。本机已有完整参考资源（含视频复核 policy）时，也可运行 `.\.venv\Scripts\python.exe scripts/migrate_reference_models.py` 生成该目录；旧版免安装包未必含 policy，不能只复制下列四个文件就当完整正式资源。模型不随 Git 分发；启动界面不等于检测资源已准备。正式推理不需要训练数据，也不导入参考目录。
+正式应用的检测入口现为根目录 `run_app.cmd` / `run_app.py`。本次开发分支将 `weights/` 与代码一同提交，完成前述推理依赖安装并拉取后，应具备完整 `weights/runtime/`：`generation.pt`、`manipulation.pt`、`yunet.onnx`、`video_policy.json`、`YuNet-LICENSE.txt`、`manifest.json`。已安装候选及其 manifest 同步位于 `weights/generation-candidates/`。启动界面不等于模型校验已通过，首次检测会核验资源；正式推理不需要训练数据，也不导入参考目录。
+
+队友先拉取当前开发分支（合入主分支后再从 main 拉取），即可同时取得代码与模型。`weights/` 禁止文本换行转换，避免 Windows / Linux 间的许可证或配置字节变化破坏哈希。只需离线补模型时，也可使用配套模型包：先核对 `SHA256SUMS.txt`，再解压到**仓库根目录**，不要解压到已有 `weights/` 内导致 `weights/weights/`。例如在仓库根目录执行：
+
+```powershell
+Get-FileHash -LiteralPath "C:\你的下载目录\FaceGuard-models-20261102.zip" -Algorithm SHA256
+Expand-Archive -LiteralPath "C:\你的下载目录\FaceGuard-models-20261102.zip" -DestinationPath . -Force
+```
+
+解压后应能看到 `weights/runtime/generation.pt`、`weights/runtime/manipulation.pt` 与 `weights/generation-candidates/manifest.json`。模型包只提供推理资源，不含 Python 环境、训练数据或源码；仍需完成本页依赖安装，并使用配套正式源码。模型资源在加载时按 manifest 核验；不要用重命名文件、删除校验或随机初始化来绕过缺失提示。
 
 
-**运行环境、模型权重和训练数据是三样不同的东西。Git 克隆只带来源码和依赖说明。**
+**运行环境、模型权重和训练数据是三样不同的东西。当前开发分支的 Git 克隆包含源码、依赖说明与 `weights/`，不包含虚拟环境或训练数据。**
 
 | 目标 | 下一步 |
 | --- | --- |
 | 修改代码、运行已有测试 | 环境验收通过即可开始 |
-| 用源码检测自己的照片 / 视频 | 按 [README 的模型准备步骤](../README.md) 放好两个模型、YuNet 与就绪标记 |
+| 用源码检测自己的照片 / 视频 | 按 [README 的模型准备步骤](../README.md) 安装完整 runtime 资源及 manifest；需要候选时一并安装 generation-candidates |
 | 训练换脸 / 篡改模型 | 按 [数据说明](data-setup.md) 和 [FF++ 预处理说明](data-setup.md#ffpp) 准备合法来源的数据与清单 |
-| 训练整脸生成模型 | 按 [生成检测复现说明](../reference_run/README.md#generation) 准备数据 |
+| 训练整脸生成模型 | 按 [生成检测复现说明](TRAINING.md#generation) 准备数据 |
 
-以下是保留的参考入口所需四个核心资源。可从 v0.1.0 解压后的 `FaceGuard` 文件夹中，按相同相对路径复制到项目的 `reference_run` 目录：
+正式应用需要完整的 `weights/runtime/`（包括 manifest、生成 / 篡改权重、YuNet、视频 policy 与许可证），准备方法见 [根目录 README](../README.md)。已有完整历史资源时可运行 `scripts/migrate_reference_models.py` 只读导入归档资源；不再按旧方法向 `reference_run` 复制模型或创建环境。
 
-```text
-reference_run/weights/face_detection_yunet_2023mar.onnx
-reference_run/artifacts/model_finetuned.pt
-reference_run/artifacts/generation/joint/model.pt
-reference_run/artifacts/generation/joint/READY.json
-```
-
-模型准备完成后，在根目录运行：
+准备完成后，在仓库根目录运行：
 
 ```powershell
-.\.venv\Scripts\python.exe reference_run/gui.py
+.\.venv\Scripts\python.exe -m pip install -r requirements-ui.txt
+.\.venv\Scripts\python.exe run_app.py
 ```
 
-也可以双击 `reference_run/run_demo.cmd`。当前启动器使用根目录 `.venv`；`reference_run/.venv` 是历史临时环境，新队友不需要创建它。
+也可以双击根目录 `run_app.cmd`。`reference_run` 已归档，旧 GUI 和虚拟环境不作为当前开发入口；训练说明统一见 [TRAINING.md](TRAINING.md)。
 
 已准备好 FF++ 处理后图片与清单时，可进一步检查一次小批量训练及模型读写：
 

@@ -69,13 +69,33 @@ class DetectionWorker(QThread):
 class DetailPreviewWorker(QThread):
     ready = Signal(str, str)
     failed = Signal(str)
+    heatmapReady = Signal(str, dict)
+    heatmapFailed = Signal(str)
 
-    def __init__(self, source, record, destination):
+    def __init__(self, source, record, destination, explain=False, generation_profile='stable', source_signature=None):
         super().__init__()
         self.source, self.record, self.destination = source, record, Path(destination)
+        self.explain, self.generation_profile = explain, generation_profile
+        self.source_signature = source_signature
+        self.cancel_event = threading.Event()
+
+    def cancel(self):
+        self.cancel_event.set()
+
+    def check_cancel(self):
+        if self.cancel_event.is_set():
+            raise InferenceCancelled()
+
+    def check_source(self):
+        self.check_cancel()
+        if self.source_signature is not None:
+            stat = Path(self.source).stat()
+            if self.source_signature != dict(size=stat.st_size, mtime_ns=stat.st_mtime_ns):
+                raise ValueError('原文件已变化，请重新检测。')
 
     def run(self):
         try:
+            self.check_source()
             from PIL import Image, ImageOps
             if self.record['frame_index'] >= 0:
                 import cv2
@@ -100,9 +120,27 @@ class DetailPreviewWorker(QThread):
             face.thumbnail((1000, 1000))
             face.save(self.destination, format='PNG')
             frame_path = self.destination.with_name(self.destination.stem + '-frame.png')
-            image.thumbnail((2000, 2000))
-            image.save(frame_path, format='PNG')
+            preview = image.copy()
+            preview.thumbnail((2000, 2000))
+            preview.save(frame_path, format='PNG')
+            self.check_source()
             self.ready.emit(str(self.destination), str(frame_path))
+            if self.explain:
+                try:
+                    from .inference.heatmaps import explain_face, render_overlay
+                    payload = explain_face(image, self.record, self.generation_profile, self.check_cancel)
+                    self.check_source()
+                    overlay = render_overlay(payload, image.size, self.record.get('bbox'), output_size=preview.size)
+                    heatmap_path = self.destination.with_name(self.destination.stem + '-heatmap.png')
+                    overlay.save(heatmap_path, format='PNG')
+                    self.check_source()
+                    self.heatmapReady.emit(str(heatmap_path), payload)
+                except InferenceCancelled:
+                    raise
+                except Exception as error:
+                    self.heatmapFailed.emit(str(error))
+        except InferenceCancelled:
+            pass
         except Exception as error:
             self.failed.emit(str(error))
 
@@ -175,7 +213,10 @@ def detail_records(result):
             for face in observation['faces']:
                 records.append(dict(title=f'{prefix} · 人脸 #{face["face_id"]}',
                                     text=f'{VERDICTS.get(face["decision"], face["decision"])}\n模型分 {face["score"]:.4f} · 阈值 {face["threshold"]:.4f}',
-                                    bbox=face['bbox'], frame_index=frame, task='manipulation'))
+                                    bbox=face['bbox'], frame_index=frame, task='manipulation',
+                                    face_id=face['face_id'], score=face['score'],
+                                    inference_device=result.get('inference_device'),
+                                    model_sha256=result.get('model_sha256'), heatmap=face.get('heatmap')))
     else:
         tasks = result.get('results', {('generation' if result.get('task') == 'whole_face_generation' else 'manipulation'): result})
         for task, item in tasks.items():
@@ -183,5 +224,20 @@ def detail_records(result):
             for face in item.get('face_results', []):
                 records.append(dict(title=f'{label} · 人脸 #{face["face_id"]}',
                                     text=f'{VERDICTS.get(face["decision"], face["decision"])}\n模型分 {face["score"]:.4f} · 阈值 {face["threshold"]:.4f}',
-                                    bbox=face.get('bbox'), frame_index=-1, task=task))
+                                    bbox=face.get('bbox'), frame_index=-1, task=task,
+                                    face_id=face['face_id'], score=face['score'],
+                                    inference_device=item.get('inference_device'),
+                                    model_sha256=item.get('model_sha256'), heatmap=face.get('heatmap')))
     return records
+
+
+def store_detail_heatmap(result, record, payload):
+    """Persist only the selected face/task/frame, without changing its verdict."""
+    if record['frame_index'] >= 0:
+        faces = next(row['faces'] for row in result['observations']
+                     if row['frame_index'] == record['frame_index'])
+    else:
+        item = result.get('results', {}).get(record['task'], result)
+        faces = item['face_results']
+    face = next(face for face in faces if face['face_id'] == record['face_id'])
+    face['heatmap'] = payload

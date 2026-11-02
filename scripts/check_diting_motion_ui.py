@@ -23,7 +23,7 @@ from faceguard.app import AppController,UI_DIRECTORY
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--record',action='store_true')
     args=p.parse_args()
-    out=ROOT/'outputs/diting-3d/animation-v5/ui-check';out.mkdir(parents=True,exist_ok=True)
+    out=ROOT/'outputs/diting-3d/animation-v6/ui-check';out.mkdir(parents=True,exist_ok=True)
     messages=[]
     def log(kind,context,message):
         messages.append(message);print(message.encode('ascii',errors='backslashreplace').decode(),flush=True)
@@ -102,7 +102,7 @@ def main():
         static_frame=digest();QTest.qWait(220);assert digest()==static_frame
         controller.toggleReducedMotion();QTest.qWait(200)
         assert volume.property('playing') and volume.property('motionName')=='Idle'
-        checks=['real 20-joint skin rendered','idle changes chest scale and rendered pixels without rotating root',
+        checks=['real 23-joint skin rendered','idle changes chest scale and rendered pixels without rotating root',
                 'eyelid joint closes during blink','large respond and listen poses render','one-shot returns to idle','interruption blends toward rest before starting next clip',
                 'pause/resume retains timeline position','reduced motion stops deformation and resumes idle']
         if args.record and shutil.which('ffmpeg'):

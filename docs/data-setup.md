@@ -128,7 +128,7 @@ Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/opencv/opencv_zoo/main
 
 ## 整脸生成与新增来源
 
-- 当前配套：LFW、FFHQ-256 镜像真实照片，以及 [FairFaceGen](https://zenodo.org/records/17062365) 的 FLUX / SD3.5 种子包。先在根目录运行 scripts/download_fairfacegen.py，再按 [生成检测复现](../reference_run/README.md#generation) 下载真实照片并统一裁脸。
+- 当前配套：LFW、FFHQ-256 镜像真实照片，以及 [FairFaceGen](https://zenodo.org/records/17062365) 的 FLUX / SD3.5 种子包。先在根目录运行 scripts/download_fairfacegen.py，再按 [生成检测复现](TRAINING.md#generation) 下载真实照片并统一裁脸。
 - 新来源实验使用过 OpenFake 与 FairFace 镜像，固定版本、数量、隔离和评测情况见 [实验记录](EXPERIMENTS.md#session-20261026)。
 - 后续候选入口：[AI-Face](https://github.com/Purdue-M2/AI-Face-FairnessBench)、[DiFF](https://github.com/iLearn-Lab/MM24-DiFF)、[Community Forensics](https://jespark.net/projects/2024/community_forensics/)。这些是历史候选，不代表已下载或已验证；取得数据前核对条款、实际生成方法与存储需求。
 
@@ -156,7 +156,7 @@ GAN 来源记录为 [TheKernel01/140k-Real-and-Fake-Faces](https://huggingface.c
 1. **统一裁脸已完成。** DFF 60,000 张沿用 YuNet 0.8、最大脸、1.3 倍、128px / JPEG90；58,371 张成功，1,629 张未检出人脸并单列。输出在 `02_processed/generation/dff-sd15-20261031-v1/`，框、原图路径、缓存与失败表在同版本 `05_provenance/`；抽看 16 组裁脸，未据此宣称全量人工标签核验。
 2. **分组与去重已冻结。** WIKI 元数据在 `05_provenance/imdb-wiki/`，来自 [官方元数据包](https://data.vision.ee.ethz.ch/cvl/rrothe/imdb-wiki/)，有下载范围和成员哈希收据。DFF 真 / 假家族、人名与 LFW 同名（727 个重叠）连接；新旧候选及初始训练历史行逐图核对像素 SHA-256，以 pHash 距离 ≤ 6 连接相似图。与初始权重训练暴露冲突、跨 split 关联及精确重复共隔离 1,434 行。已看过的 DFF 开发家族 / 人名不进入新测试。
 3. **实际划分：train 70,198 / val 14,697 / test 14,616。** 清单、分开的 train-val / locked-test 和协议在 `03_manifests/dff-sd15-20261031-v1/`。旧数据保留原划分角色，不把旧 test 回流；初始模型见过但后来删除的行仍参与泄漏检查。FFHQ 身份未知、人名及 pHash 有漏检可能，不能声称全部生物身份互斥。
-4. **本轮训练限定 DFF + 旧生成数据。** 来源均衡混合 SD1.5、FLUX、SD3.5 与真实来源；验证集只用于选轮次和阈值，最终测试等候选锁定后再打开。训练配置和执行入口见 [复现说明](../reference_run/README.md#new-data-20261031)，实际实验结论以 `docs/EXPERIMENTS.md` 为准。
+4. **本轮训练限定 DFF + 旧生成数据。** 来源均衡混合 SD1.5、FLUX、SD3.5 与真实来源；验证集只用于选轮次和阈值，最终测试等候选锁定后再打开。训练配置和执行入口见 [复现说明](TRAINING.md#new-data-20261031)，实际实验结论以 `docs/EXPERIMENTS.md` 为准。
 5. **GAN 仍作为外部开发检查。** 原 validation 不进入训练；固定 200 张与旧模型比较，也不称新盲测。需要 GAN 训练时应补原 train，并另保留隔离验证 / 测试。新数据仅补整脸生成，不能替代换脸视频、短暂篡改或真实定位标注；未知生成工具、独立真实来源和团队人工验收仍待补。
 
 U 盘 `SOURCE.md` 原样保存在统一根目录的 `05_provenance/incoming-20261031/SOURCE.md`，原 `D:\datasets\SOURCE.md` 硬链接已删除；旧 `extract.py` 仍限量和重编码，不作为新正式预处理入口。说明中“旧生成数据本体未持有”与本机不符：LFW、FFHQ、FairFaceGen 与原始 / 清洗清单均保留，本轮已按训练历史一起复核。新增产物继续登记同一 DATA_CATALOG，不恢复旧数据目录。

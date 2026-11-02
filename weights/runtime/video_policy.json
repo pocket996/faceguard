@@ -1,0 +1,15 @@
+{
+  "algorithm": "adjacent_pair_mean_v1",
+  "max_gap_seconds": 1.5,
+  "model_sha256": "53c0edb0ceb076e23aa1d738b549e111176a5ddf1e89fa1cd21c9262381c3b7b",
+  "threshold": 0.9978253841400148,
+  "operating_point": "conservative",
+  "alternatives": {
+    "conservative": 0.9978253841400148,
+    "review": 0.9863243699073793
+  },
+  "validation_real_videos": 140,
+  "intended_empirical_false_alert_rate": 0.01,
+  "selection": "Validation real scores only; default conservative preset fixed before test",
+  "warning": "Empirical operating point, not a distribution-free guarantee. Same FF++ validation also selected model; no independent calibration sample. Multi-person and unseen sources not validated."
+}

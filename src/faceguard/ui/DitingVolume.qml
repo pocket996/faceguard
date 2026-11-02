@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick3D
-import "assets/diting-motion-v5" as Character
+import "assets/diting-motion-v6" as Character
 
 Item {
     id: volume
@@ -100,7 +100,7 @@ Item {
         Node {
             position: Qt.vector3d(0, 1.9, 0)
             eulerRotation.y: volume.angle
-            Character.DitingExpressiveV5 {
+            Character.DitingActingV6 {
                 id: character
                 objectName: "ditingRuntimeModel"
                 position: Qt.vector3d(0, -1.9, 0)

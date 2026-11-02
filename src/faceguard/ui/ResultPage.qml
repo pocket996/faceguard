@@ -8,10 +8,10 @@ Item {
     signal backRequested()
     property int viewMode: 0
     property real overlayOpacity: 0.6
-    property url heatmapSource: ""
+    readonly property url heatmapSource: controller.heatmapUrl
     readonly property bool heatmapReady: heatmapProbe.status === Image.Ready
     property bool hasPhoto: !!controller.fileName && controller.mediaKind === "image"
-    property url displayedSource: page.hasPhoto ? controller.previewUrl : controller.selectedFrameUrl
+    property url displayedSource: controller.selectedFrameUrl.toString() ? controller.selectedFrameUrl : (page.hasPhoto ? controller.previewUrl : "")
     readonly property bool hasImage: page.hasPhoto || !!controller.selectedFrameUrl.toString()
     readonly property bool compact: page.height < 620
     property real zoom: 1
@@ -90,8 +90,8 @@ Item {
                                     anchors.centerIn: parent; width: Math.min(parent.width - 24, 295); height: 110
                                     radius: 14; color: "#f6f5ed"; border.color: "#daddce"; opacity: 0.97
                                     Column { anchors.centerIn: parent; width: parent.width - 24; spacing: 10
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: heatmapProbe.status === Image.Error ? "热力图无法读取" : "等待热力图结果"; font.family: "SimSun"; font.pixelSize: 20; color: "#355349" }
-                                        Text { width: parent.width; text: heatmapProbe.status === Image.Error ? "结果文件可能已移动或损坏" : "热力图计算尚待实现\n当前可查看真实检测分数与人脸"; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; color: "#7c8778"; font.pixelSize: 11; lineHeight: 1.5 }
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: heatmapProbe.status === Image.Error ? "热力图无法读取" : controller.detailBusy ? "正在准备热力图" : "模型关注区域"; font.family: "SimSun"; font.pixelSize: 20; color: "#355349" }
+                                        Text { width: parent.width; text: heatmapProbe.status === Image.Error ? "结果文件可能已移动或损坏，请重新选择人脸" : controller.heatmapStatus; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; color: "#7c8778"; font.pixelSize: 11; lineHeight: 1.5 }
                                     }
                                 }
                                 Text { anchors.centerIn: parent; visible: !page.hasImage && !showOverlay; width: parent.width - 30; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; text: controller.mediaKind === "video" && controller.fileName ? (controller.hasResult ? "选择右侧人脸，查看对应视频采样帧" : "完成视频检测后，可选择采样帧查看") : "导入照片后，在此查看原图"; color: "#7c8778"; font.pixelSize: 13 }
@@ -117,7 +117,9 @@ Item {
                             }
                         }
                         Text { text: Math.round(page.overlayOpacity * 100) + "%"; color: "#7c8778"; font.pixelSize: 11 }
+                        AppButton { text: "取消热力图"; visible: controller.detailBusy; implicitWidth: 100; onClicked: controller.cancelDetail() }
                     }
+                    Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: controller.heatmapStatus; color: "#55705f"; font.pixelSize: 12 }
                     Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: "热力图用于解释模型关注区域，不代表已经验证的精确篡改边界。"; color: "#7c8778"; font.pixelSize: 10 }
                 }
             }
@@ -151,6 +153,7 @@ Item {
                                 required property int index
                                 width: ListView.view.width; implicitHeight: 34
                                 text: modelData.title
+                                primary: controller.selectedDetailIndex === index
                                 onClicked: controller.selectDetail(index)
                             }
                         }
