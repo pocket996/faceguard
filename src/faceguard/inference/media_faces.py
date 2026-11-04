@@ -2,6 +2,13 @@
 import cv2
 import numpy as np
 from PIL import Image
+from pathlib import Path
+
+
+def create_face_detector(weight):
+    """Use OpenCV's buffer API so Windows Unicode install paths work."""
+    model = np.frombuffer(Path(weight).read_bytes(), dtype=np.uint8)
+    return cv2.FaceDetectorYN.create('onnx', model, np.empty(0, dtype=np.uint8), (320, 320), .8, .3, 5000)
 
 
 def detect_face_crops(frame, detector, max_faces=32):

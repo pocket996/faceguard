@@ -80,7 +80,7 @@ def main():
     snapshot_path = output / 'frozen-sources.json'
     if not args.skip_freeze:
         snapshot = source_fingerprint()
-        command = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
+        command = [sys.executable, '-m', 'PyInstaller', '--noconfirm',
                    '--distpath', str(output / 'dist'), '--workpath', str(output / 'build'),
                    str(ROOT / 'packaging/FaceGuard.spec')]
         subprocess.run(command, cwd=ROOT, check=True)

@@ -7,6 +7,7 @@ import torch
 
 from .core import Predictor, detect_face_crops, digest, image_transform, load_detector, score_images
 from .generation_common import canonical_face
+from .media_faces import create_face_detector
 from faceguard.model_registry import checked_resource
 
 PHOTO_SUFFIXES = ('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff')
@@ -25,7 +26,7 @@ class GenerationPredictor:
         weight = checked_resource('yunet.onnx')
         if digest(weight) != self.state['yunet_sha256']:
             raise ValueError('YuNet 权重与训练预处理不匹配')
-        self.detector = cv2.FaceDetectorYN.create(str(weight), '', (320, 320), .8, .3, 5000)
+        self.detector = create_face_detector(weight)
         self.transform = image_transform()
 
     @torch.inference_mode()

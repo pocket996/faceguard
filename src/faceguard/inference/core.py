@@ -8,7 +8,7 @@ import torch
 from torch import nn
 from torchvision import models, transforms
 from faceguard.model_registry import digest, checked_resource
-from .media_faces import detect_face_crops,crop_face
+from .media_faces import detect_face_crops,crop_face,create_face_detector
 
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
@@ -64,7 +64,7 @@ class Predictor:
         weight = checked_resource('yunet.onnx')
         if digest(weight) != self.state['yunet_sha256']:
             raise ValueError('YuNet weights differ from training preprocessing')
-        self.detector = cv2.FaceDetectorYN.create(str(weight), '', (320, 320), 0.8, 0.3, 5000)
+        self.detector = create_face_detector(weight)
         self.transform = image_transform()
 
     @torch.inference_mode()
