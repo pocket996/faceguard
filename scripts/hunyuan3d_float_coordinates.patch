@@ -1,0 +1,14 @@
+diff --git a/hy3dgen/shapegen/models/autoencoders/volume_decoders.py b/hy3dgen/shapegen/models/autoencoders/volume_decoders.py
+--- a/hy3dgen/shapegen/models/autoencoders/volume_decoders.py
++++ b/hy3dgen/shapegen/models/autoencoders/volume_decoders.py
+@@ -258,6 +258,8 @@ class HierarchicalVolumeDecoding:
+             next_points = torch.stack(nidx, dim=1)
+-            next_points = (next_points * torch.tensor(resolution, dtype=next_points.dtype, device=device) +
+-                           torch.tensor(bbox_min, dtype=next_points.dtype, device=device))
++            # FaceGuard local compatibility fix: grid indices are int64, but
++            # world-space spacing must stay floating point (otherwise becomes 0).
++            next_points = (next_points * torch.tensor(resolution, dtype=torch.float32, device=device) +
++                           torch.tensor(bbox_min, dtype=torch.float32, device=device))
+             batch_logits = []
+             for start in tqdm(range(0, next_points.shape[0], num_chunks),
+                               desc=f"Hierarchical Volume Decoding [r{octree_depth_now + 1}]"):

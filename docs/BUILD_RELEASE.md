@@ -1,4 +1,6 @@
-# 构建 Windows CPU 免安装包
+# 历史 v0.1.0 Windows CPU 包构建记录
+
+本文保留旧发布版的构建过程，以下命令是历史记录，不作为当前正式应用的新打包步骤。`reference_run` 已封存，不再在其中创建新构建环境或输出；当前谛听正式界面尚未制作新安装包。后续正式打包入口与输出须置于归档外。
 
 构建环境必须与训练环境隔离，使用 Windows x64 / Python 3.11。不要把含 CUDA 的训练环境整体打进发布包。
 
@@ -41,3 +43,34 @@ reference_run/.release-venv/Scripts/python.exe reference_run/check_portable_rele
 若 Python 上传遇到连接中断，可传 `--transport curl` 使用 Windows 原生 curl；认证头经 stdin 提供，不出现在进程命令行。草稿附件会按校验值去重，失败的同名附件可在重试时替换。发布后使用正式标签的附件地址，不能沿用草稿阶段的 untagged 地址。
 
 官方参考：[PyInstaller 使用说明](https://pyinstaller.org/en/stable/usage.html)、[运行时资源路径](https://pyinstaller.org/en/stable/runtime-information.html)、[GitHub Release API](https://docs.github.com/en/rest/releases/releases)。
+
+<a id="v010"></a>
+
+## v0.1.0 发布记录
+
+### 队友如何使用
+
+1. 下载附件 **FaceGuard-v0.1.0-windows-x64-cpu.zip**，不要下载 Source code。
+2. 完整解压，打开 FaceGuard 文件夹，双击 **FaceGuard.exe**。
+3. 选择自己的照片或视频，点击蓝色「开始检测」。
+
+不需要 Python、CUDA、独立显卡或训练数据。适用 Windows 10/11 x64 Intel/AMD 电脑；目前没有 macOS、Linux 或 ARM 原生包。首次加载模型需等待，视频处理速度取决于长度和电脑性能。
+
+### 包含功能
+
+- 照片默认检测 AI 整脸生成；视频默认检测换脸/面部篡改。
+- 照片要查换脸时，可切换顶部「检测项目」。
+- 中文步骤引导、照片/视频首帧预览、真实读取进度、结果解释和报告保存。
+- 运行时、两份检测模型与 YuNet 随包提供，资源缺失或损坏会给出说明。
+- 文件在本机处理，不上传网络。个人照片、训练数据与数据集示例未包含在发布包中。
+- ZIP 校验值见 SHA256SUMS.txt；资源与构建信息见包内 runtime_manifest.json / BUILD_INFO.json。
+
+### 已做检查
+
+新目录解压并从 PATH 移除 Python 后，检查启动、生成照片、真实照片、篡改视频、无脸输入、资源损坏拦截。尚未在每位队友的实际电脑上验收。
+
+### 当前能力边界
+
+这是实验预览版。生成模型主要训练于 FLUX 和 SD3.5，陌生生成工具仍可能判断错误；分数不是真实性概率。视频最多采样16帧，每帧看最大人脸，未提供整段 AI 生成视频检测。代码的 MIT 许可证不替代模型训练素材或第三方组件的适用条款。
+
+详细的大白话解释：[项目不足与改进](https://github.com/pocket996/faceguard/blob/v0.1.0/docs/PROJECT_LIMITATIONS_PLAIN.md)。

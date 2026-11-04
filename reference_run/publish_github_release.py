@@ -8,7 +8,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-REPO = 'pocket996/deepfake-detection'
+REPO = 'pocket996/faceguard'
 
 
 def credentials():

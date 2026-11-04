@@ -2,7 +2,7 @@
 from pathlib import Path
 import sys
 
-APP_VERSION = '0.1.0'
+APP_VERSION = '0.2.0-dev'
 
 
 def application_directory():

@@ -1,4 +1,5 @@
 """Check saved metrics, CPU/GPU model parity, raw video preprocessing, and no-face behavior."""
+from project_io import resolve_data_path, data_location
 import csv
 import json
 from pathlib import Path
@@ -19,11 +20,11 @@ def main(variant='frozen'):
     start = time.monotonic()
     torch.set_num_threads(4)
     cv2.setNumThreads(1)
-    artifact = HERE / 'artifacts'
+    artifact = resolve_data_path(HERE / 'artifacts')
     prefix = 'finetuned_' if variant == 'finetuned' else ''
     checkpoint = artifact / ('model_finetuned.pt' if variant == 'finetuned' else 'model.pt')
     report = json.loads((artifact / f'{prefix}metrics.json').read_text(encoding='utf-8'))
-    manifest = PROJECT / 'data/manifests/ffpp-frames-full-93e2b370610e.csv'
+    manifest = resolve_data_path(PROJECT / 'data/manifests/ffpp-frames-full-93e2b370610e.csv')
     rows = load_rows(manifest)
     checks = {}
     # CUDA convolution kernels/TF32 can differ between batch=1 and batch=96.
@@ -44,7 +45,7 @@ def main(variant='frozen'):
     checks['threshold_rule'] = 'passed'
     selected = [next(r for r in rows if r['split'] == 'test' and r['label'] == label) for label in ('0', '1')]
     cpu_model, cpu_head, state = load_detector(checkpoint, 'cpu')
-    with Image.open(PROJECT / selected[0]['path']) as image:
+    with Image.open(resolve_data_path(PROJECT / selected[0]['path'])) as image:
         x = image_transform()(image.convert('RGB'))[None]
     with torch.inference_mode():
         cpu_score = float(cpu_head(cpu_model(x)).sigmoid().item())
@@ -60,10 +61,10 @@ def main(variant='frozen'):
     with (artifact / f'{prefix}test_frames.csv').open(encoding='utf-8-sig', newline='') as stream:
         frame_predictions = {r['sample_id']: float(r['score']) for r in csv.DictReader(stream)}
     for row in selected:
-        image_result = predictor.predict(PROJECT / row['path'], face_crop=True)
+        image_result = predictor.predict(resolve_data_path(PROJECT / row['path']), face_crop=True)
         image_error = abs(image_result['score'] - frame_predictions[row['sample_id']])
         assert image_error < probability_tolerance, (row['sample_id'], image_result['score'], frame_predictions[row['sample_id']])
-        video_result = predictor.predict(PROJECT / row['source_video'])
+        video_result = predictor.predict(resolve_data_path(PROJECT / row['source_video']))
         expected = next(v for v in videos if v['video_id'] == row['parent_video_id'])
         error = abs(video_result['score'] - float(expected['score']))
         assert error < probability_tolerance, (row['source_video'], error)

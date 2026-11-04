@@ -1,7 +1,6 @@
 """Standalone FF++ reference model, data checks, and inference preprocessing."""
+from project_io import resolve_data_path, data_location
 import csv
-import hashlib
-import json
 from collections import defaultdict
 from pathlib import Path
 
@@ -11,32 +10,15 @@ from PIL import Image, ImageOps
 import torch
 from torch import nn
 from torchvision import models, transforms
-from app_paths import application_directory
+from project_io import HERE,PROJECT,digest,save_json
+from media_faces import detect_face_crops,crop_face
 
-HERE = application_directory()
-PROJECT = HERE.parent
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
 
 
-def save_json(path, value):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + '.tmp')
-    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False), encoding='utf-8')
-    temp.replace(path)
-
-
-def digest(path):
-    h = hashlib.sha256()
-    with Path(path).open('rb') as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b''):
-            h.update(block)
-    return h.hexdigest()
-
-
 def load_rows(manifest):
-    with Path(manifest).open(encoding='utf-8-sig', newline='') as stream:
+    with resolve_data_path(manifest).open(encoding='utf-8-sig', newline='') as stream:
         rows = list(csv.DictReader(stream))
     if not rows:
         raise ValueError('Empty manifest')
@@ -58,7 +40,7 @@ def load_rows(manifest):
             if row.get(key):
                 sources[(row['dataset'], row[key])].add(row['split'])
         videos[row['parent_video_id']].add((row['split'], row['label'], row['group_id'], row['method']))
-        if not (PROJECT / row['path']).is_file():
+        if not (resolve_data_path(PROJECT / row['path'])).is_file():
             raise FileNotFoundError(row['path'])
     if any(len(v) != 1 for mapping in (groups, sources, videos) for v in mapping.values()):
         raise ValueError('Source/group/video metadata crosses splits or is inconsistent')
@@ -74,7 +56,13 @@ def image_transform():
                                transforms.Normalize(MEAN, STD)])
 
 
-def backbone():
+def backbone(architecture='resnet18'):
+    if architecture=='vit_b_16':
+        model=models.vit_b_16(weights=None)
+        model.heads=nn.Identity()
+        return model
+    if architecture!='resnet18':
+        raise ValueError('Unsupported detector architecture')
     model = models.resnet18(weights=None)
     model.fc = nn.Identity()
     return model
@@ -82,55 +70,50 @@ def backbone():
 
 def load_detector(checkpoint, device):
     state = torch.load(checkpoint, map_location='cpu', weights_only=True)
-    model = backbone()
+    architecture=state.get('architecture','resnet18')
+    model = backbone(architecture)
     model.load_state_dict(state['backbone'])
     model = model.to(device).eval()
-    head = nn.Linear(512, 1).to(device)
+    head = nn.Linear(768 if architecture=='vit_b_16' else 512, 1).to(device)
     head.load_state_dict(state['head'])
     head.eval()
     return model, head, state
 
 
-def crop_face(frame, detector):
-    height, width = frame.shape[:2]
-    scale = min(1., 640 / max(height, width))
-    small = cv2.resize(frame, (max(1, int(width * scale)), max(1, int(height * scale))))
-    detector.setInputSize((small.shape[1], small.shape[0]))
-    _, faces = detector.detect(small)
-    if faces is None:
-        return None
-    face = max(faces, key=lambda row: row[2] * row[3])
-    x, y, w, h = face[:4] / scale
-    size = min(max(w, h) * 1.3, width, height)
-    left = min(max(x + w / 2 - size / 2, 0), width - size)
-    top = min(max(y + h / 2 - size / 2, 0), height - size)
-    # Same integer rounding as the original project's prepared PNGs.
-    box = [left / width, top / height, (left + size) / width, (top + size) / height]
-    x1, y1 = int(box[0] * width), int(box[1] * height)
-    x2, y2 = min(width, int(np.ceil(box[2] * width))), min(height, int(np.ceil(box[3] * height)))
-    if x2 <= x1 or y2 <= y1:
-        return None
-    face_image = cv2.resize(frame[y1:y2, x1:x2], (256, 256), interpolation=cv2.INTER_AREA)
-    return Image.fromarray(cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB))
+def score_images(model, head, transform, images, device, batch_size=16):
+    """Bound inference memory even when a picture contains many faces."""
+    scores = []
+    for start in range(0, len(images), batch_size):
+        batch = torch.stack([transform(image) for image in images[start:start + batch_size]]).to(device)
+        scores.extend(head(model(batch)).sigmoid().flatten().detach().cpu().tolist())
+    return scores
 
 
 class Predictor:
     def __init__(self, checkpoint=None, device=None):
         if checkpoint is None:
-            fine = HERE / 'artifacts/model_finetuned.pt'
-            checkpoint = fine if fine.is_file() else HERE / 'artifacts/model.pt'
+            fine = resolve_data_path(HERE / 'artifacts/model_finetuned.pt')
+            checkpoint = fine if fine.is_file() else resolve_data_path(HERE / 'artifacts/model.pt')
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
+        self.checkpoint_path = resolve_data_path(checkpoint).resolve()
+        self.model_sha256 = digest(self.checkpoint_path)
         self.model, self.head, self.state = load_detector(checkpoint, self.device)
-        weight = HERE / 'weights/face_detection_yunet_2023mar.onnx'
+        weight = resolve_data_path(HERE / 'weights/face_detection_yunet_2023mar.onnx')
         if digest(weight) != self.state['yunet_sha256']:
             raise ValueError('YuNet weights differ from training preprocessing')
         self.detector = cv2.FaceDetectorYN.create(str(weight), '', (320, 320), 0.8, 0.3, 5000)
         self.transform = image_transform()
 
     @torch.inference_mode()
-    def predict(self, path, face_crop=False, progress=None):
-        path = Path(path).resolve()
+    def predict(self, path, face_crop=False, progress=None, adaptive_video=False):
+        path = resolve_data_path(path).resolve()
+        if adaptive_video and path.suffix.lower() not in ('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff'):
+            if face_crop:
+                raise ValueError('--face-crop is only supported for images')
+            from video_analysis import analyze_video
+            return analyze_video(self, path, progress)
         images, skipped, attempted = [], 0, 0
+        face_records, detected_count = [], 0
         if path.suffix.lower() in ('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff'):
             if progress:
                 progress('reading_image', 0, 1)
@@ -138,12 +121,15 @@ class Predictor:
                 image = ImageOps.exif_transpose(image).convert('RGB')
                 if face_crop:
                     images.append(image)
+                    attempted = 1
+                    detected_count = 1
+                    face_records = [dict(face_id=1, bbox=None)]
                 else:
                     attempted = 1
-                    face = crop_face(cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR), self.detector)
-                    if face is not None:
-                        images.append(face)
-                    else:
+                    detected, detected_count = detect_face_crops(cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR), self.detector)
+                    images = [row['image'] for row in detected]
+                    face_records = [{key: value for key, value in row.items() if key != 'image'} for row in detected]
+                    if not images:
                         skipped += 1
             kind = 'image'
         else:
@@ -184,10 +170,19 @@ class Predictor:
             return dict(result, decision='no_face', score=None)
         if progress:
             progress('inference', 0, len(images))
-        batch = torch.stack([self.transform(image) for image in images]).to(self.device)
-        scores = self.head(self.model(batch)).sigmoid().flatten().cpu().tolist()
+        scores = score_images(self.model, self.head, self.transform, images, self.device)
         score = float(np.mean(scores))
         threshold = self.state['video_threshold'] if kind == 'video' else self.state['frame_threshold']
+        if kind == 'image':
+            result['photo_validation'] = 'FF++ video-frame threshold; independent ordinary-photo operating point not established'
+            for record, value in zip(face_records, scores):
+                record.update(score=value, threshold=threshold,
+                              decision='suspected_manipulation' if value >= threshold else 'no_manipulation_detected')
+            result.update(face_results=face_records, detected_faces=detected_count,
+                          unanalysed_faces=max(0, detected_count - len(face_records)))
+            if len(face_records) > 1:
+                return dict(result, decision='multiple_face_results', score=None, frame_scores=scores,
+                            aggregation='No image-level threshold is calibrated for multiple faces; inspect each result.')
         return dict(result, score=score, threshold=threshold,
                     decision='suspected_manipulation' if score >= threshold else 'no_manipulation_detected',
                     frame_scores=scores)

@@ -1,4 +1,5 @@
 """Pin and hash-check two public FFHQ-256 mirror shards, not the full 7.6 GB."""
+from project_io import resolve_data_path, data_location
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
@@ -17,7 +18,7 @@ SHARDS = [
 
 def download(spec):
     name, size, expected = spec
-    folder = HERE / 'data/raw/ffhq256'
+    folder = resolve_data_path(HERE / 'data/raw/ffhq256')
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / name
     url = f'https://huggingface.co/datasets/{REPO}/resolve/{REVISION}/data/{name}'
@@ -53,7 +54,7 @@ def download(spec):
 
 def main():
     receipts = list(ThreadPoolExecutor(2).map(download, SHARDS))
-    (HERE / 'data/raw/ffhq256/receipts.json').write_text(json.dumps(dict(
+    (resolve_data_path(HERE / 'data/raw/ffhq256/receipts.json')).write_text(json.dumps(dict(
         repo=REPO, revision=REVISION, files=receipts,
         provenance='Publisher-reported FFHQ-256 mirror, not an official NVIDIA distribution',
         upstream='https://github.com/NVlabs/ffhq-dataset',
