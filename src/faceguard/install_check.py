@@ -22,6 +22,7 @@ def main():
     from PySide6.QtCore import QObject, QMetaObject, QSettings, QUrl, QPointF, Qt, qInstallMessageHandler
     from PySide6.QtGui import QCursor, QFont, QIcon
     from PySide6.QtQml import QQmlApplicationEngine
+    from PySide6.QtMultimedia import QAudioOutput  # Register the QML audioOutput pointer converter.
     from PySide6.QtQuickControls2 import QQuickStyle
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication
