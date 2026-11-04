@@ -41,7 +41,7 @@ FaceGuard 将两种容易混淆的问题分开回答：**“这张脸是否由 A
 | **实验模型对照** | 在高级选项中显式选择候选，记录实际模型版本；稳定默认与实验候选分开保存 |
 | **本地处理与 CLI** | 媒体分析在本机进行，所选文件不上传服务端；支持 CPU 推理与 CUDA 环境 |
 
-本机开发预览包含上述功能，以及淡莲水面、分层眼睛和检测歪头时的双耳轻动。新图标采用用户提供的青玉底、米白谛听侧首图样，统一工作台、弹窗、窗口与托盘显示。淡莲、眼睛 / 耳动、热力图扩展与新图标改动尚未提交或上传；公开开发分支不包含这些本机更新。
+v0.2.0-rc.1 已包含上述功能，以及淡莲水面、分层眼睛和检测歪头时的双耳轻动。新图标采用用户提供的青玉底、米白谛听侧首图样，统一工作台、弹窗、窗口与托盘显示。源码及配套模型已提交到 [PR #5](https://github.com/pocket996/faceguard/pull/5)，新版 CPU 安装包已发布，独立干净电脑验收仍待完成。
 
 ### 把日常操作与技术选项分开
 
@@ -113,7 +113,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create_shortcut.ps1
 # 照片：分别分析生成与篡改
 .\.venv\Scripts\python.exe scripts/predict_official.py "C:\media\photo.jpg" --task both --device cpu --output outputs/photo-result.json
 
-# 视频：分别检查采样人脸的生成与篡改线索（本机源码新增）
+# 视频：分别检查采样人脸的生成与篡改线索
 .\.venv\Scripts\python.exe scripts/predict_official.py "C:\media\clip.mp4" --task both --device cpu --output outputs/video-result.json
 # 也可指定 --task generation 或 --task manipulation；auto 默认双项
 ```
@@ -150,7 +150,7 @@ flowchart LR
 
 ## 项目文档
 
-以下链接指向新版应用所在的公开开发分支。
+以下文档链接固定到 v0.2.0-rc.1；后续交付与验证状态见维护分支的 LOG.md。
 
 | 想了解什么 | 阅读入口 |
 | --- | --- |
