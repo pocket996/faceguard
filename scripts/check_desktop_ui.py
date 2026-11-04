@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import hashlib
 import time
+import argparse
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +24,10 @@ from faceguard.app import AppController, UI_DIRECTORY
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--synthetic-pointer', action='store_true',
+                        help='Send Qt pointer events when a remote session blocks native cursor movement')
+    args = parser.parse_args()
     faulthandler.dump_traceback_later(90)
     output = ROOT / 'outputs' / 'desktop-ui-check'
     output.mkdir(parents=True, exist_ok=True)
@@ -154,9 +159,12 @@ def main():
         def move_pet_mouse(point):
             # Use native movement for both entry and exit. Mixing QTest's
             # synthetic moves with a stationary OS cursor can miss Leave.
-            window.raise_()
-            window.requestActivate()
-            QCursor.setPos(window.mapToGlobal(point))
+            if args.synthetic_pointer:
+                QTest.mouseMove(window, point)
+            else:
+                window.raise_()
+                window.requestActivate()
+                QCursor.setPos(window.mapToGlobal(point))
             QTest.qWait(150)
         move_pet_mouse(QPointF(-30, 150).toPoint())
         wait_for(lambda: not pet_hint.property('visible') and not pet_actions.property('visible'))
@@ -259,7 +267,7 @@ def main():
         QTest.mouseDClick(window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPointF(150, 170).toPoint())
         assert window.width() == 1080
         checks = ['reference-derived 23-joint skinned 3D character', 'busy-bound listening and return', 'reduced motion stops listening without cancelling detection', 'styled dialogs accept/reject; history cancel preserves records', 'model dropdown opens by mouse and closes by Escape', 'image import', 'same character retained across modes', 'transparent pet window', 'file retained across modes', 'reduced motion', '1080x720 layout', 'technical details only in settings; experimental versions initially collapsed', 'detection requires a selected file', 'reference_run not imported', 'large original/heatmap/comparison result area', 'no fabricated heatmaps', 'history filtering and reopening without duplication', 'synchronized comparison panning + fit reset', 'fade transition + rapid-click guard']
-        checks.append('pet hint/actions hide on native pointer exit; remain visible over buttons; photo/video/expand clicks and reduced-motion double-click work')
+        checks.append('pet hint/actions hide on pointer exit; remain visible over buttons; photo/video/expand clicks and reduced-motion double-click work')
         ffmpeg = shutil.which('ffmpeg')
         if ffmpeg:
             fixture_video = Path(temporary) / 'preview.mp4'
@@ -306,7 +314,7 @@ def main():
         checks.extend(['prepared textured skin loads in Qt Quick 3D', '3D rotation changes actual rendered pixels', '3D orientation reset', '3D preview releases scene on close'])
         forbidden = [m for m in messages if any(term in m for term in ('ReferenceError', 'TypeError', 'is not a type', 'Cannot assign', 'Binding loop', 'Unable to assign', 'Failed to create', 'Failed to load shader', 'Shader compilation failed'))]
         assert not forbidden, '\n'.join(forbidden)
-        report = {'passed': True, 'checks': checks, 'video_check': 'passed' if ffmpeg else 'skipped: ffmpeg not installed', 'messages': messages}
+        report = {'passed': True, 'checks': checks, 'pointer_mode': 'QtTest directed events' if args.synthetic_pointer else 'native cursor', 'video_check': 'passed' if ffmpeg else 'skipped: ffmpeg not installed', 'messages': messages}
         (output / 'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
         print(json.dumps(report, ensure_ascii=True, indent=2))
         faulthandler.cancel_dump_traceback_later()
