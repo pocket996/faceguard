@@ -130,7 +130,9 @@ def calibrated_windows(pairs, threshold, fps, duration):
     return windows
 
 
-def analyze_video(predictor, path, progress=None):
+def analyze_video(predictor, path, progress=None, *, generation=False, sampling='adaptive'):
+    if sampling not in ('adaptive', 'legacy'):
+        raise ValueError('Unknown video sampling method')
     capture = cv2.VideoCapture(str(path))
     try:
         if not capture.isOpened():
@@ -139,6 +141,8 @@ def analyze_video(predictor, path, progress=None):
         raw_fps = float(capture.get(cv2.CAP_PROP_FPS))
         fps = raw_fps if math.isfinite(raw_fps) and .1 <= raw_fps <= 240 else None
         initial, legacy_indices = coarse_targets(count, fps)
+        if sampling == 'legacy':
+            initial = sorted(legacy_indices)
         observations = []
         frame_threshold = float(predictor.state['frame_threshold'])
         def sample(targets, phase):
@@ -152,26 +156,50 @@ def analyze_video(predictor, path, progress=None):
                 if not math.isfinite(actual) or abs(actual - index) > .5:
                     raise ValueError('Video frame seeking position is inconsistent')
                 detected, total = detect_face_crops(frame, predictor.detector)
+                images = [r['image'] for r in detected]
+                if generation:
+                    from .generation_common import canonical_face
+                    images = [canonical_face(image) for image in images]
                 scores = score_images(predictor.model, predictor.head, predictor.transform,
-                                      [r['image'] for r in detected], predictor.device) if detected else []
+                                      images, predictor.device) if detected else []
                 faces = []
                 for record, value in zip(detected, scores):
                     face = {k: v for k, v in record.items() if k != 'image'}
                     face.update(score=float(value), threshold=frame_threshold,
-                                decision='suspected_manipulation' if value >= frame_threshold else 'no_manipulation_detected')
+                                decision=('suspected_generation' if value >= frame_threshold else 'no_generation_detected') if generation
+                                else ('suspected_manipulation' if value >= frame_threshold else 'no_manipulation_detected'))
                     faces.append(face)
                 observations.append(dict(frame_index=index, seconds=index / fps if fps else None,
                     phase=phase, detected_faces=total, unanalysed_faces=total-len(faces), faces=faces))
                 if progress:
                     progress('video_' + phase, step + 1, len(targets))
         sample(initial, 'coverage')
-        extra = refinement_targets(count, fps, observations, frame_threshold)
+        extra = refinement_targets(count, fps, observations, frame_threshold) if sampling == 'adaptive' else []
         sample(extra, 'refinement')
     finally:
         capture.release()
     observations.sort(key=lambda row: row['frame_index'])
     spatial_tracks(observations, fps)
     duration = count / fps if fps else None
+    if generation:
+        seen_faces = sum(len(row['faces']) for row in observations)
+        gaps = np.diff([row['frame_index'] for row in observations])
+        return dict(path=str(path), media_type='video', task='whole_face_generation', sampling='generation_frame_review',
+            inference_device=str(predictor.device), model_sha256=predictor.model_sha256,
+            score=None, decision='video_results' if seen_faces else 'no_face',
+            raw_frame_alert=any(face['score'] >= frame_threshold for row in observations for face in row['faces']),
+            faces=seen_faces, face_frames=sum(bool(row['faces']) for row in observations),
+            sampled_frames=len(observations), no_face_frames=sum(not row['faces'] for row in observations),
+            unanalysed_faces=sum(row['unanalysed_faces'] for row in observations),
+            fps=fps, duration_seconds=duration, coarse_frames=len(initial), refined_frames=len(extra),
+            max_sample_gap_seconds=float(max(gaps, default=0) / fps) if fps else None,
+            observations=observations, training_generators=predictor.state['training_generators'],
+            scope='Photo generation model applied to sampled video faces; no calibrated whole-video generation verdict.',
+            limitations=['Photo-trained model and frame threshold; video-level accuracy and false-positive rate not established',
+                         'Only whole-face visual generation cues; no audio or full-scene generation detection',
+                         'Sampling is bounded to 96 coarse + 48 refined frames; short events can be missed',
+                         'IoU tracks are temporary spatial associations, not facial identity',
+                         'Nominal FPS timestamps may be approximate for variable-frame-rate media'])
     legacy_scores = [r['faces'][0]['score'] for r in observations if r['frame_index'] in legacy_indices and r['faces']]
     legacy_score = float(np.mean(legacy_scores)) if legacy_scores else None
     video_threshold = float(predictor.state['video_threshold'])

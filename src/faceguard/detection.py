@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from PySide6.QtCore import QThread, Signal
 
 from faceguard.inference.inference_control import InferenceCancelled
+from faceguard.inference.explanation_cache import explanation_key
 
 
 class DetectionWorker(QThread):
@@ -72,11 +73,12 @@ class DetailPreviewWorker(QThread):
     heatmapReady = Signal(str, dict)
     heatmapFailed = Signal(str)
 
-    def __init__(self, source, record, destination, explain=False, generation_profile='stable', source_signature=None):
+    def __init__(self, source, record, destination, explain=False, generation_profile='stable', source_signature=None, model_cache=None):
         super().__init__()
         self.source, self.record, self.destination = source, record, Path(destination)
         self.explain, self.generation_profile = explain, generation_profile
         self.source_signature = source_signature
+        self.model_cache = model_cache
         self.cancel_event = threading.Event()
 
     def cancel(self):
@@ -128,7 +130,7 @@ class DetailPreviewWorker(QThread):
             if self.explain:
                 try:
                     from .inference.heatmaps import explain_face, render_overlay
-                    payload = explain_face(image, self.record, self.generation_profile, self.check_cancel)
+                    payload = explain_face(image, self.record, self.generation_profile, self.check_cancel, self.model_cache)
                     self.check_source()
                     overlay = render_overlay(payload, image.size, self.record.get('bbox'), output_size=preview.size)
                     heatmap_path = self.destination.with_name(self.destination.stem + '-heatmap.png')
@@ -161,8 +163,14 @@ def task_state(result, task):
         return 'idle'
     if task in result.get('errors', {}):
         return 'unavailable'
+    if result.get('media_type') == 'video' and task in result.get('results', {}):
+        return task_state(result['results'][task], task)
     if result.get('media_type') == 'video':
         if task == 'generation':
+            if result.get('task') != 'whole_face_generation' or not result.get('faces'):
+                return 'unavailable'
+            return 'attention' if result.get('raw_frame_alert') else 'clear'
+        if result.get('task') in ('whole_face_generation', 'video_dual'):
             return 'unavailable'
         item = result.get('legacy_baseline', result)
         if result.get('temporal_review', {}).get('decision') == 'review_alerts':
@@ -185,9 +193,17 @@ def task_summary(result, task):
         return '等待检测'
     if task in result.get('errors', {}):
         return '检测未完成，请查看详情'
+    if result.get('media_type') == 'video' and task in result.get('results', {}):
+        return task_summary(result['results'][task], task)
     if result.get('media_type') == 'video':
         if task == 'generation':
-            return '视频暂不支持此项'
+            if result.get('task') != 'whole_face_generation':
+                return '本次未运行此项'
+            if not result.get('faces'):
+                return VERDICTS['no_face']
+            return '采样人脸有生成线索，需复核' if result.get('raw_frame_alert') else '采样人脸未检出明显生成特征'
+        if result.get('task') in ('whole_face_generation', 'video_dual'):
+            return '本次未运行此项'
         item = result.get('legacy_baseline', result)
         if result.get('temporal_review', {}).get('decision') == 'review_alerts' and item.get('decision') != 'suspected_manipulation':
             return '局部片段需复核'
@@ -204,19 +220,23 @@ def task_summary(result, task):
 def detail_records(result):
     if not result:
         return []
+    if result.get('media_type') == 'video' and 'results' in result:
+        return [record for item in result['results'].values() for record in detail_records(item)]
     records = []
     if result.get('media_type') == 'video':
+        task = 'generation' if result.get('task') == 'whole_face_generation' else 'manipulation'
+        label = '生成' if task == 'generation' else '篡改'
         for observation in result.get('observations', []):
             seconds = observation.get('seconds')
             frame = observation['frame_index']
             prefix = f'{seconds:.2f} 秒' if seconds is not None else f'帧 {frame}'
             for face in observation['faces']:
-                records.append(dict(title=f'{prefix} · 人脸 #{face["face_id"]}',
+                records.append(dict(title=f'{label} · {prefix} · 人脸 #{face["face_id"]}',
                                     text=f'{VERDICTS.get(face["decision"], face["decision"])}\n模型分 {face["score"]:.4f} · 阈值 {face["threshold"]:.4f}',
-                                    bbox=face['bbox'], frame_index=frame, task='manipulation',
-                                    face_id=face['face_id'], score=face['score'],
+                                    bbox=face['bbox'], frame_index=frame, task=task,
+                                    face_id=face['face_id'], score=face['score'], threshold=face['threshold'],
                                     inference_device=result.get('inference_device'),
-                                    model_sha256=result.get('model_sha256'), heatmap=face.get('heatmap')))
+                                    model_sha256=result.get('model_sha256'), heatmap=face.get('heatmap'), heatmaps=face.get('heatmaps', {})))
     else:
         tasks = result.get('results', {('generation' if result.get('task') == 'whole_face_generation' else 'manipulation'): result})
         for task, item in tasks.items():
@@ -225,19 +245,24 @@ def detail_records(result):
                 records.append(dict(title=f'{label} · 人脸 #{face["face_id"]}',
                                     text=f'{VERDICTS.get(face["decision"], face["decision"])}\n模型分 {face["score"]:.4f} · 阈值 {face["threshold"]:.4f}',
                                     bbox=face.get('bbox'), frame_index=-1, task=task,
-                                    face_id=face['face_id'], score=face['score'],
+                                    face_id=face['face_id'], score=face['score'], threshold=face['threshold'],
                                     inference_device=item.get('inference_device'),
-                                    model_sha256=item.get('model_sha256'), heatmap=face.get('heatmap')))
+                                    model_sha256=item.get('model_sha256'), heatmap=face.get('heatmap'), heatmaps=face.get('heatmaps', {})))
     return records
 
 
 def store_detail_heatmap(result, record, payload):
     """Persist only the selected face/task/frame, without changing its verdict."""
     if record['frame_index'] >= 0:
-        faces = next(row['faces'] for row in result['observations']
+        item = result.get('results', {}).get(record['task'], result)
+        faces = next(row['faces'] for row in item['observations']
                      if row['frame_index'] == record['frame_index'])
     else:
         item = result.get('results', {}).get(record['task'], result)
         faces = item['face_results']
     face = next(face for face in faces if face['face_id'] == record['face_id'])
-    face['heatmap'] = payload
+    target = payload.get('target', 'positive_logit')
+    kind = payload.get('kind', 'gradcam')
+    face.setdefault('heatmaps', {})[explanation_key(target, kind)] = payload
+    if target == 'positive_logit' and kind == 'gradcam':
+        face['heatmap'] = payload

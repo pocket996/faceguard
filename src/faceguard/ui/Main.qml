@@ -17,7 +17,11 @@ Window {
     property color muted: "#7c8778"
     property color gold: "#b59b65"
     property bool pet: controller.petMode
-    property bool reduced: controller.reducedMotion
+    // Preference changes fan out into timelines and render resources. Apply
+    // the Python notification after its signal stack unwinds to avoid reentry.
+    property bool reduced: false
+    function refreshMotionPreference() { reduced = controller.reducedMotion }
+    Component.onCompleted: refreshMotionPreference()
     property string activePage: "workspace"
     readonly property bool mediaImageReady: photo.status === Image.Ready
     readonly property bool videoIsPlaying: player.playbackState === MediaPlayer.PlayingState
@@ -36,6 +40,8 @@ Window {
     Shortcut { sequence: "F1"; enabled: !window.pet; onActivated: guideDialog.open() }
     Connections {
         target: controller
+        function onSettingsChanged() { Qt.callLater(window.refreshMotionPreference) }
+        function onChanged() { if (controller.busy) player.pause() }
         function onMediaOpened() {
             resultsPage.zoom = 1
             window.showPage("workspace")
@@ -57,7 +63,7 @@ Window {
         active: !window.pet && window.activePage === "workspace"
         source: "InkCourtyard.qml"
         onLoaded: {
-            item.reducedMotion = Qt.binding(function() { return controller.reducedMotion })
+            item.reducedMotion = Qt.binding(function() { return window.reduced })
             item.gaze = Qt.binding(function() { return creature.gaze })
         }
     }
@@ -71,7 +77,7 @@ Window {
         MouseArea { anchors.fill: parent; onPressed: window.startSystemMove(); onDoubleClicked: window.visibility === Window.Maximized ? window.showNormal() : window.showMaximized() }
         Row {
             x: 30; anchors.verticalCenter: parent.verticalCenter; spacing: 12
-            Image { objectName: "brandMark"; source: "brand.svg"; width: 42; height: 42; anchors.verticalCenter: parent.verticalCenter }
+            Image { objectName: "brandMark"; readonly property bool assetReady: status === Image.Ready; source: "brand.png"; sourceSize: Qt.size(84, 84); mipmap: true; width: 42; height: 42; anchors.verticalCenter: parent.verticalCenter }
             Text { text: "谛听"; font.family: "SimSun"; font.pixelSize: 27; font.bold: true; color: window.ink; anchors.verticalCenter: parent.verticalCenter }
             Rectangle { width: 1; height: 24; color: "#d8c9a8"; anchors.verticalCenter: parent.verticalCenter }
             Column { spacing: 3; anchors.verticalCenter: parent.verticalCenter
@@ -136,7 +142,10 @@ Window {
                         objectName: "mediaPlayer"
                         source: controller.mediaKind === "video" ? controller.previewUrl : ""
                         videoOutput: videoOutput
-                        audioOutput: AudioOutput { muted: true }
+                        // Preview is silent: disable decoding, rather than mute an
+                        // audio sink that still creates an FFmpeg resampler.
+                        activeAudioTrack: -1
+                        onTracksChanged: activeAudioTrack = -1
                         onErrorOccurred: function(error, errorString) { controller.showError("视频预览失败：" + errorString) }
                     }
                     VideoOutput { id: videoOutput; anchors.fill: parent; visible: controller.mediaKind === "video" && !!controller.fileName; fillMode: VideoOutput.PreserveAspectFit }
@@ -236,7 +245,7 @@ Window {
             objectName: "ditingCharacter"
             anchors.fill: parent
             waterSurface: !window.pet
-            reducedMotion: controller.reducedMotion
+            reducedMotion: window.reduced
             listening: controller.busy && !window.reduced ? 1 : 0
             motion: controller.busy ? "listening" : controller.fileName ? "ready" : "idle"
         }
@@ -268,19 +277,28 @@ Window {
         DropArea { anchors.fill: parent; onDropped: function(drop) { if (drop.urls.length === 1) controller.dropFile(drop.urls[0]); else controller.showError("每次请选择一个文件。"); } }
     }
 
-    Column {
+    Item {
+        anchors.fill: parent
         visible: window.pet
-        anchors.horizontalCenter: parent.horizontalCenter; y: 6; spacing: 4
-        Rectangle { width: 230; height: 37; color: "#fcfbf7"; radius: 18; border.color: "#dfe1d4"
-            Text { anchors.centerIn: parent; text: "要辨析时，叫我一声。"; font.family: "SimSun"; font.pixelSize: 15; color: window.ink }
+        // Observe the whole pet area without taking clicks or dragging away
+        // from the character. Keep hover while moving onto either toolbar.
+        HoverHandler { id: petHover }
+        Column {
+            objectName: "petHint"
+            visible: petHover.hovered
+            anchors.horizontalCenter: parent.horizontalCenter; y: 6; spacing: 4
+            Rectangle { width: 230; height: 37; color: "#fcfbf7"; radius: 18; border.color: "#dfe1d4"
+                Text { anchors.centerIn: parent; text: "要辨析时，叫我一声。"; font.family: "SimSun"; font.pixelSize: 15; color: window.ink }
+            }
         }
-    }
-    Row {
-        visible: window.pet
-        anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 10; spacing: 5
-        AppButton { text: "照片"; implicitWidth: 66; onClicked: controller.chooseFile("image") }
-        AppButton { text: "视频"; implicitWidth: 66; onClicked: controller.chooseFile("video") }
-        AppButton { text: "展开 ↗"; implicitWidth: 79; enabled: !controller.petTransitioning; onClicked: controller.togglePet() }
+        Row {
+            objectName: "petActions"
+            visible: petHover.hovered
+            anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 10; spacing: 5
+            AppButton { objectName: "petPhoto"; text: "照片"; implicitWidth: 66; onClicked: controller.chooseFile("image") }
+            AppButton { objectName: "petVideo"; text: "视频"; implicitWidth: 66; onClicked: controller.chooseFile("video") }
+            AppButton { objectName: "petExpand"; text: "展开 ↗"; implicitWidth: 79; enabled: !controller.petTransitioning; onClicked: controller.togglePet() }
+        }
     }
     Menu {
         id: petMenu
@@ -290,7 +308,7 @@ Window {
         MenuItem { text: "选择照片"; onTriggered: controller.chooseFile("image") }
         MenuItem { text: "选择视频"; onTriggered: controller.chooseFile("video") }
         MenuSeparator { }
-        MenuItem { text: "减少动态效果"; checkable: true; checked: controller.reducedMotion; onTriggered: controller.toggleReducedMotion() }
+        MenuItem { text: "减少动态效果"; checkable: true; checked: window.reduced; onTriggered: controller.toggleReducedMotion() }
         MenuItem { text: "始终置顶"; checkable: true; checked: controller.topmost; onTriggered: controller.toggleTopmost() }
         MenuItem { text: "暂时隐藏（从托盘恢复）"; onTriggered: controller.hideWindow() }
         MenuItem { text: "退出"; onTriggered: Qt.quit() }
@@ -332,7 +350,7 @@ Window {
                     radius: 16; color: "#f1f3eb"; border.color: "#e0e6d8"
                     ColumnLayout {
                         id: preferences; x: 16; y: 12; width: parent.width - 32; spacing: 6
-                        AppSwitch { objectName: "reducedMotionSwitch"; text: "减少动态效果"; checked: controller.reducedMotion; onClicked: controller.toggleReducedMotion() }
+                        AppSwitch { objectName: "reducedMotionSwitch"; text: "减少动态效果"; checked: window.reduced; onClicked: controller.toggleReducedMotion() }
                         Rectangle { Layout.fillWidth: true; height: 1; color: "#dfe5d7" }
                         AppSwitch { objectName: "topmostSwitch"; text: "窗口始终置顶"; checked: controller.topmost; onClicked: controller.toggleTopmost() }
                     }
@@ -378,7 +396,7 @@ Window {
                     id: volumeLoader; objectName: "volumePreviewLoader"
                     anchors.fill: parent; active: volumeDialog.visible
                     asynchronous: true; source: "DitingVolume.qml"
-                    onLoaded: item.reducedMotion = Qt.binding(function() { return controller.reducedMotion })
+                    onLoaded: item.reducedMotion = Qt.binding(function() { return window.reduced })
                 }
                 BusyIndicator { anchors.centerIn: parent; running: volumeLoader.status === Loader.Loading }
                 Text {
@@ -389,7 +407,7 @@ Window {
             }
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter; spacing: 10
-                enabled: !controller.reducedMotion && volumeLoader.item && volumeLoader.item.assetReady
+                enabled: !window.reduced && volumeLoader.item && volumeLoader.item.assetReady
                 AppButton { text: "待机呼吸"; quiet: true; onClicked: volumeLoader.item.playMotion("Idle") }
                 AppButton { text: "点头回应"; quiet: true; onClicked: volumeLoader.item.playMotion("Respond") }
                 AppButton { text: "侧耳倾听"; quiet: true; onClicked: volumeLoader.item.playMotion("Listen") }
@@ -401,7 +419,7 @@ Window {
                 AppButton { text: "恢复朝向"; quiet: true; onClicked: if (volumeLoader.item) volumeLoader.item.resetOrientation() }
                 AppButton { text: "向右转"; quiet: true; onClicked: if (volumeLoader.item) volumeLoader.item.turn(25) }
             }
-            Text { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: controller.reducedMotion ? "已开启减少动态效果，角色保持静止 · 可拖动或滚轮旋转" : "拖动或滚轮旋转 · 眨眼、大幅点头、转头倾听"; color: window.muted; font.pixelSize: 12 }
+            Text { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: window.reduced ? "已开启减少动态效果，角色保持静止 · 可拖动或滚轮旋转" : "拖动或滚轮旋转 · 眨眼、大幅点头、转头倾听"; color: window.muted; font.pixelSize: 12 }
         }
     }
     AppDialog {
@@ -414,9 +432,9 @@ Window {
             ScrollBar.vertical.active: true
             ColumnLayout {
                 id: technicalContent; width: parent.width; spacing: 12
-                InfoCard { Layout.fillWidth: true; marker: "◎"; title: "模型与媒体"; body: "当前生成模型：" + controller.generationModelLabel + "\n篡改模型：FF++ 基线。视频使用整段 16 帧基线与有采样上限的局部复核；短事件仍可能漏检。普通照片篡改结果仅作复核线索。" }
+                InfoCard { Layout.fillWidth: true; marker: "◎"; title: "模型与媒体"; body: "当前生成模型：" + controller.generationModelLabel + "\n视频同时检查生成与篡改：生成项使用照片模型分析采样人脸，尚未标定整段视频结论；篡改项保留 FF++ 的 16 帧基线与局部复核。采样间隙仍可能漏检，普通照片篡改结果仅作复核线索。" }
                 InfoCard { Layout.fillWidth: true; marker: "◇"; title: "能力与边界"; body: "工作台、桌宠与立体预览均为 23 骨骼坐姿角色，支持眨眼、回应和检测倾听。热力图展示所选人脸的模型关注区域。张嘴表演与四足行走尚待完善。分数是模型倾向，不是真假概率。" }
-                Text { Layout.fillWidth: true; text: "PySide6 / Qt Quick · 本机 SQLite 历史 · PDF / TXT 报告\n独立推理模块与本地资源，不依赖参考项目运行。"; wrapMode: Text.Wrap; color: "#6c806e"; font.pixelSize: 12; lineHeight: 1.5 }
+                Text { Layout.fillWidth: true; text: "FaceGuard " + controller.appVersion + "\nPySide6 / Qt Quick · 本机 SQLite 历史 · PDF / TXT 报告\n独立推理模块与本地资源，不依赖参考项目运行。"; wrapMode: Text.Wrap; color: "#6c806e"; font.pixelSize: 12; lineHeight: 1.5 }
             }
         }
     }

@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick3D
-import "assets/diting-motion-v6" as Character
+import "assets/diting-motion-v7" as Character
 
 Item {
     id: volume
@@ -81,9 +81,10 @@ Item {
             antialiasingMode: SceneEnvironment.MSAA
             antialiasingQuality: SceneEnvironment.High
         }
-        Node { id: aim; position: Qt.vector3d(0, 1.9, 0) }
+        Node { id: aim; objectName: "ditingPreviewAim"; position: Qt.vector3d(0, 1.9, 0) }
         OrthographicCamera {
             id: camera
+            objectName: "ditingPreviewCamera"
             position: Qt.vector3d(-5, 2.6, 8)
             lookAtNode: aim
             clipNear: 0.05; clipFar: 40
@@ -100,7 +101,7 @@ Item {
         Node {
             position: Qt.vector3d(0, 1.9, 0)
             eulerRotation.y: volume.angle
-            Character.DitingActingV6 {
+            Character.DitingEyesV7 {
                 id: character
                 objectName: "ditingRuntimeModel"
                 position: Qt.vector3d(0, -1.9, 0)

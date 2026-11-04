@@ -8,12 +8,13 @@ import shutil
 import subprocess
 import hashlib
 import time
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
-from PySide6.QtCore import QObject, QMetaObject, QSettings, QUrl, QPointF, Qt, qInstallMessageHandler
-from PySide6.QtGui import QFont, QImage
+from PySide6.QtCore import QObject, QMetaObject, QSettings, QUrl, QPointF, Qt, QSize, qInstallMessageHandler
+from PySide6.QtGui import QCursor, QFont, QIcon, QImage
 from PySide6.QtQml import QQmlApplicationEngine, QQmlProperty
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtTest import QTest
@@ -31,6 +32,12 @@ def main():
         print(message.encode('ascii', errors='backslashreplace').decode(), flush=True)
     qInstallMessageHandler(log)
     app = QApplication([])
+    icon = QIcon(str(UI_DIRECTORY / 'brand.ico'))
+    assert not icon.isNull()
+    for size in (16, 20, 24, 32, 40, 48, 64, 128, 256):
+        assert QSize(size, size) in icon.availableSizes()
+        assert not icon.pixmap(size, size).isNull()
+    app.setWindowIcon(icon)
     app.setFont(QFont('Microsoft YaHei UI', 10))
     QQuickStyle.setStyle('Basic')
     with tempfile.TemporaryDirectory() as temporary:
@@ -43,6 +50,7 @@ def main():
         if not engine.rootObjects():
             raise RuntimeError('\n'.join(messages))
         window = engine.rootObjects()[0]
+        window.setIcon(icon)
         controller.window = window
         QTest.qWait(1800)
 
@@ -68,6 +76,9 @@ def main():
             return visit(window.contentItem())
 
         capture('01-workbench')
+        assert not window.icon().isNull()
+        mark=window.findChild(QObject,'brandMark')
+        assert mark.property('assetReady') and str(mark.property('source').toString()).endswith('brand.png')
         character = window.findChild(QObject, 'ditingCharacter')
         assert character is not None
         assert character.property('assetReady')
@@ -138,10 +149,44 @@ def main():
         assert abs(window.opacity() - 1) < 0.001
         assert window.width() == 300
         assert window.findChild(QObject, 'ditingCharacter') is character
+        pet_hint = window.findChild(QObject, 'petHint')
+        pet_actions = window.findChild(QObject, 'petActions')
+        def move_pet_mouse(point):
+            # Use native movement for both entry and exit. Mixing QTest's
+            # synthetic moves with a stationary OS cursor can miss Leave.
+            window.raise_()
+            window.requestActivate()
+            QCursor.setPos(window.mapToGlobal(point))
+            QTest.qWait(150)
+        move_pet_mouse(QPointF(-30, 150).toPoint())
+        wait_for(lambda: not pet_hint.property('visible') and not pet_actions.property('visible'))
         capture('04-desktop-pet')
         # Verify a transparent native window, not an ivory screenshot rectangle.
         assert window.grabWindow().pixelColor(0, window.height() - 1).alpha() == 0
-        controller.togglePet()
+        move_pet_mouse(QPointF(150, 170).toPoint())
+        wait_for(lambda: pet_hint.property('visible') and pet_actions.property('visible'))
+        capture('04b-desktop-pet-hover')
+        for name, kind in [('petPhoto', 'image'), ('petVideo', 'video')]:
+            button = window.findChild(QObject, name)
+            center = button.mapToScene(QPointF(button.width() / 2, button.height() / 2)).toPoint()
+            move_pet_mouse(center)
+            QTest.qWait(150)
+            assert pet_hint.property('visible') and pet_actions.property('visible'), (name, center, window.mapFromGlobal(QCursor.pos()), button.property('hovered'))
+            with patch('faceguard.app.QFileDialog.getOpenFileName', return_value=('', '')) as choose:
+                QTest.mouseClick(window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, center)
+                assert choose.call_count == 1
+                assert ('选择照片' if kind == 'image' else '选择视频') in choose.call_args.args
+        move_pet_mouse(QPointF(150, 20).toPoint())
+        QTest.qWait(100)
+        assert pet_actions.property('visible')
+        move_pet_mouse(QPointF(-30, 150).toPoint())
+        wait_for(lambda: not pet_hint.property('visible') and not pet_actions.property('visible'))
+        expand = window.findChild(QObject, 'petExpand')
+        center = expand.mapToScene(QPointF(expand.width() / 2, expand.height() / 2)).toPoint()
+        move_pet_mouse(QPointF(150, 170).toPoint())
+        wait_for(lambda: pet_actions.property('visible'))
+        move_pet_mouse(center)
+        QTest.mouseClick(window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, center)
         wait_for(lambda: not controller.petTransitioning)
         assert window.width() == 1380
         assert controller.fileName == 'preview.png'
@@ -160,6 +205,8 @@ def main():
         selector = window.findChild(QObject, 'generationModelSelector')
         assert not selector.property('visible'), 'Experimental versions must be collapsed initially'
         capture('13-settings')
+        marks=visual_items('dialogBrandMark')
+        assert marks and all(m.property('assetReady') and m.property('source').toString().endswith('brand.png') for m in marks)
         reduced_switch = visual_items('reducedMotionSwitch')[0]
         reduced_before = controller.reducedMotion
         switch_point = reduced_switch.mapToScene(QPointF(20, reduced_switch.height() / 2)).toPoint()
@@ -205,9 +252,14 @@ def main():
         controller.togglePet()
         assert not controller.petTransitioning
         assert window.width() == 300
-        controller.togglePet()
+        move_pet_mouse(QPointF(-30, 150).toPoint())
+        wait_for(lambda: not pet_actions.property('visible'))
+        move_pet_mouse(QPointF(150, 170).toPoint())
+        wait_for(lambda: pet_actions.property('visible'))
+        QTest.mouseDClick(window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPointF(150, 170).toPoint())
         assert window.width() == 1080
         checks = ['reference-derived 23-joint skinned 3D character', 'busy-bound listening and return', 'reduced motion stops listening without cancelling detection', 'styled dialogs accept/reject; history cancel preserves records', 'model dropdown opens by mouse and closes by Escape', 'image import', 'same character retained across modes', 'transparent pet window', 'file retained across modes', 'reduced motion', '1080x720 layout', 'technical details only in settings; experimental versions initially collapsed', 'detection requires a selected file', 'reference_run not imported', 'large original/heatmap/comparison result area', 'no fabricated heatmaps', 'history filtering and reopening without duplication', 'synchronized comparison panning + fit reset', 'fade transition + rapid-click guard']
+        checks.append('pet hint/actions hide on native pointer exit; remain visible over buttons; photo/video/expand clicks and reduced-motion double-click work')
         ffmpeg = shutil.which('ffmpeg')
         if ffmpeg:
             fixture_video = Path(temporary) / 'preview.mp4'

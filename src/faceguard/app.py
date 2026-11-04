@@ -15,10 +15,12 @@ from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWidgets import QApplication, QFileDialog, QMenu, QSystemTrayIcon
 
 from faceguard.history import HistoryStore
+from faceguard.inference.explanation_cache import ExplanationModelCache
 from faceguard.detection import DetectionWorker, DetailPreviewWorker, task_summary, task_state, detail_records, store_detail_heatmap
 from faceguard.model_registry import resource_status, generation_profiles
 from faceguard.data_locations import resolve_data_path
-from faceguard.reports import write_report
+from faceguard.reports import write_report, write_heatmap_diagram
+from faceguard.version import APP_VERSION
 
 UI_DIRECTORY = Path(__file__).resolve().parent / 'ui'
 # Keep Python-owned QML properties and rendering on the GUI thread on Windows.
@@ -33,6 +35,7 @@ class AppController(QObject):
     historyChanged = Signal()
     mediaOpened = Signal()
     detectionFinished = Signal()
+    appVersion = Property(str, lambda self: APP_VERSION, constant=True)
 
     def __init__(self, settings=None, history_path=None):
         super().__init__()
@@ -57,6 +60,8 @@ class AppController(QObject):
         self._detail_url, self._detail_text = QUrl(), ''
         self._frame_url = QUrl()
         self._heatmap_url, self._heatmap_status = QUrl(), '选择人脸后查看模型关注区域'
+        self._heatmap_target, self._heatmap_kind, self._heatmap_payload = 0, 0, None
+        self._explanation_models = ExplanationModelCache(capacity=2)
         self._detail_busy, self._selected_detail, self._pending_detail = False, -1, None
         self._preview_workers, self._preview_token = [], None
         self._preview_directory = None
@@ -87,9 +92,9 @@ class AppController(QObject):
     engineStatus = Property(str, lambda self: self._engine_status, notify=changed)
     progressText = Property(str, lambda self: self._progress, notify=changed)
     hasResult = Property(bool, lambda self: bool(self._result), notify=changed)
-    generationSummary = Property(str, lambda self: ('视频暂不支持此项' if self._kind == 'video' and not self._result else task_summary(self._result, 'generation')), notify=changed)
+    generationSummary = Property(str, lambda self: task_summary(self._result, 'generation'), notify=changed)
     manipulationSummary = Property(str, lambda self: task_summary(self._result, 'manipulation'), notify=changed)
-    generationState = Property(str, lambda self: 'unavailable' if self._kind == 'video' else ('working' if self._busy else task_state(self._result, 'generation')), notify=changed)
+    generationState = Property(str, lambda self: 'working' if self._busy else task_state(self._result, 'generation'), notify=changed)
     manipulationState = Property(str, lambda self: 'working' if self._busy else task_state(self._result, 'manipulation'), notify=changed)
     resultDetails = Property('QVariantList', lambda self: detail_records(self._result), notify=changed)
     resultText = Property(str, lambda self: self.result_text(), notify=changed)
@@ -100,12 +105,15 @@ class AppController(QObject):
     heatmapStatus = Property(str, lambda self: self._heatmap_status, notify=changed)
     detailBusy = Property(bool, lambda self: self._detail_busy, notify=changed)
     selectedDetailIndex = Property(int, lambda self: self._selected_detail, notify=changed)
+    heatmapTargetIndex = Property(int, lambda self: self._heatmap_target, notify=changed)
+    heatmapMethodIndex = Property(int, lambda self: self._heatmap_kind, notify=changed)
 
     def _reset_detail(self):
         for worker in self._preview_workers:
             worker.cancel()
         self._detail_url, self._detail_text, self._preview_token = QUrl(), '', None
         self._frame_url = QUrl()
+        self._heatmap_payload = None
         self._heatmap_url, self._heatmap_status = QUrl(), '选择人脸后查看模型关注区域'
         self._detail_busy, self._selected_detail, self._pending_detail = False, -1, None
 
@@ -113,6 +121,28 @@ class AppController(QObject):
     def ensureDetail(self):
         if self._selected_detail < 0 and not self._busy and detail_records(self._result):
             self.selectDetail(0)
+
+    @Slot(int)
+    def setHeatmapTarget(self, index):
+        if index not in (0, 1) or index == self._heatmap_target:
+            return
+        selected = self._selected_detail if self._selected_detail >= 0 else self._pending_detail
+        self._heatmap_target = index
+        self._heatmap_url, self._heatmap_payload = QUrl(), None
+        self.changed.emit()
+        if selected is not None and selected >= 0:
+            self.selectDetail(selected)
+
+    @Slot(int)
+    def setHeatmapMethod(self, index):
+        if index not in (0, 1) or index == self._heatmap_kind:
+            return
+        selected = self._selected_detail if self._selected_detail >= 0 else self._pending_detail
+        self._heatmap_kind = index
+        self._heatmap_url, self._heatmap_payload = QUrl(), None
+        self.changed.emit()
+        if selected is not None and selected >= 0:
+            self.selectDetail(selected)
 
     @Slot()
     def cancelDetail(self):
@@ -145,10 +175,13 @@ class AppController(QObject):
             self.showError(str(error))
             return
         record = records[index]
+        record['target'] = 'positive_logit' if self._heatmap_target == 0 else 'negative_logit'
+        record['kind'] = 'gradcam' if self._heatmap_kind == 0 else 'occlusion'
         self._detail_text = record['title'] + '\n' + record['text']
         self._detail_url = QUrl()
         self._frame_url = QUrl()
         self._heatmap_url = QUrl()
+        self._heatmap_payload = None
         self._selected_detail, self._detail_busy = index, True
         self._heatmap_status = '正在计算模型关注区域'
         token = uuid4().hex
@@ -158,7 +191,7 @@ class AppController(QObject):
         destination = Path(self._preview_directory.name) / (token + '.png')
         worker = DetailPreviewWorker(self._url.toLocalFile(), record, destination,
                                      explain=True, generation_profile=self._result.get('generation_model_profile', 'stable'),
-                                     source_signature=signature)
+                                     source_signature=signature, model_cache=self._explanation_models)
         self._preview_workers.append(worker)
         def ready(filename, frame_filename):
             if token == self._preview_token:
@@ -172,10 +205,9 @@ class AppController(QObject):
         def heatmap_ready(filename, payload):
             if token == self._preview_token:
                 self._heatmap_url = QUrl.fromLocalFile(filename)
-                positive = any(value > 0 for row in payload['grid'] for value in row)
-                self._heatmap_status = ('颜色表示支持“' + ('整脸生成' if record['task'] == 'generation' else '面部篡改')
-                                        + '”判断的关注强度；每张图独立归一化' if positive
-                                        else '所选人脸没有可显示的正向关注响应')
+                self._heatmap_payload = payload
+                from faceguard.inference.heatmaps import explanation_text
+                self._heatmap_status = explanation_text(payload, record)
                 store_detail_heatmap(self._result, record, payload)
                 self._record_result(self._result, 'partial' if self._result.get('errors') else 'completed')
                 self.changed.emit()
@@ -303,6 +335,33 @@ class AppController(QObject):
             raise ValueError('请先完成检测。')
         write_report(filename, self._result, self.result_text())
 
+    def export_heatmap(self, filename, opacity=.6):
+        if self._detail_busy or not self._heatmap_payload or self._heatmap_url.isEmpty():
+            raise ValueError('请先选择人脸并等待关注图完成。')
+        label = self._heatmap_payload['model_sha256'][:12]
+        if self._heatmap_payload['task'] == 'generation':
+            item = self._result.get('results', {}).get('generation', self._result)
+            label = item.get('model_label', self._result.get('generation_model_profile', '整脸生成模型')) + ' · ' + label
+        else:
+            label = '换脸 / 篡改模型 · ' + label
+        write_heatmap_diagram(filename, self._frame_url.toLocalFile(), self._heatmap_url.toLocalFile(),
+                              self._name, self._detail_text, self._heatmap_status, label, opacity)
+
+    @Slot(float)
+    def saveHeatmap(self, opacity):
+        if self._detail_busy or not self._heatmap_payload:
+            return
+        filename, selected_filter = QFileDialog.getSaveFileName(
+            None, '导出当前关注图', Path(self._name).stem + '-模型关注图.png',
+            'PNG 图片 (*.png);;PDF 图示 (*.pdf)')
+        if filename:
+            try:
+                if not Path(filename).suffix:
+                    filename += '.pdf' if '*.pdf' in selected_filter else '.png'
+                self.export_heatmap(filename, opacity)
+            except (OSError, ValueError) as error:
+                self.showError('图示导出失败：' + str(error))
+
     @Slot()
     def saveReport(self):
         if not self._result:
@@ -329,6 +388,7 @@ class AppController(QObject):
                 self._record_result(None, 'cancelled')
         for worker in self._preview_workers:
             worker.wait()
+        self._explanation_models.clear()
         if self._preview_directory is not None:
             self._preview_directory.cleanup()
             self._preview_directory = None
@@ -581,7 +641,8 @@ def main():
     QQuickStyle.setStyle('Basic')
     application.setApplicationName('谛听 · FaceGuard')
     application.setOrganizationName('FaceGuard')
-    icon = QIcon(str(UI_DIRECTORY / 'brand.svg'))
+    application.setApplicationVersion(APP_VERSION)
+    icon = QIcon(str(UI_DIRECTORY / 'brand.ico'))
     application.setWindowIcon(icon)
     controller = AppController()
     engine = QQmlApplicationEngine()
@@ -590,6 +651,7 @@ def main():
     if not engine.rootObjects():
         raise SystemExit('无法加载谛听界面，请检查 Qt Quick 图形运行环境。')
     controller.window = engine.rootObjects()[0]
+    controller.window.setIcon(icon)
     application.aboutToQuit.connect(controller.shutdown)
     if controller.topmost:
         controller.window.setFlag(Qt.WindowType.WindowStaysOnTopHint, True)

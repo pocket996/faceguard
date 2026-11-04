@@ -14,7 +14,7 @@ Item {
         objectName: "courtyardLandscape"
         x: -10 - courtyard.parallax * 5; y: -5
         width: parent.width + 20; height: parent.height + 10
-        source: "assets/ink-lake-v2.png"
+        source: "assets/ink-lake-lotus-v3.png"
         asynchronous: true; fillMode: Image.PreserveAspectCrop
         sourceSize.width: 2200
     }

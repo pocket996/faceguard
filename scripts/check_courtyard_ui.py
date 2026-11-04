@@ -22,14 +22,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--record', action='store_true')
     args = parser.parse_args()
-    output = ROOT / 'outputs/ink-lake-v6-20261101'
+    output = ROOT / 'outputs/lotus-eyes-20261102'
     output.mkdir(parents=True, exist_ok=True)
     messages = []
     qInstallMessageHandler(lambda kind, context, message: messages.append(message))
     app = QApplication([])
     app.setFont(QFont('Microsoft YaHei UI', 10))
     QQuickStyle.setStyle('Basic')
-    assert QImageReader(str(UI_DIRECTORY / 'assets/ink-lake-v2.png')).canRead()
+    assert QImageReader(str(UI_DIRECTORY / 'assets/ink-lake-lotus-v3.png')).canRead()
     with tempfile.TemporaryDirectory() as directory:
         controller = AppController(QSettings(directory + '/prefs.ini', QSettings.IniFormat),
                                    history_path=Path(directory) / 'history.sqlite3')
@@ -100,6 +100,14 @@ def main():
         wait(lambda: actor.property('holdingListen'))
         assert actor.property('motionName') == 'Listen'
         capture('03-listening-water')
+        ear_upright=actor.findChild(QObject,'EarUpright')
+        ear_folded=actor.findChild(QObject,'EarFolded')
+        first_upright=ear_upright.property('rotation')
+        first_folded=ear_folded.property('rotation')
+        QTest.qWait(700)
+        assert distance(first_upright,ear_upright.property('rotation'))>.01,'Listening must articulate the upright ear'
+        assert distance(first_folded,ear_folded.property('rotation'))>.01,'The folded ear needs its own delayed movement'
+        capture('03b-ear-adjustment')
         # Stay busy longer than the original four-second one-shot clip.
         QTest.qWait(4400)
         assert actor.property('holdingListen') and actor.property('motionName') == 'Listen'
@@ -203,6 +211,7 @@ def main():
                   'rendered-pose reflection and planted-paw ripples',
                   'pose-preserving interruption and smooth return',
                   'sustained listening beyond four seconds; rapid cancellation',
+                  'independent upright/folded ear adjustments during sustained detection',
                   'reduced motion freezes skin, ripples, reflection without stopping detection',
                   'responsive 1080x720; background parallax and reduced-motion stop',
                   'background unload/restore; character pauses off-page',

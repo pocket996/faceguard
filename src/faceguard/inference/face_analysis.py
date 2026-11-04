@@ -29,10 +29,13 @@ class GenerationPredictor:
         self.transform = image_transform()
 
     @torch.inference_mode()
-    def predict(self, path, face_crop=False, progress=None):
+    def predict(self, path, face_crop=False, progress=None, video_sampling='adaptive'):
         path = Path(path).resolve()
         if path.suffix.lower() not in PHOTO_SUFFIXES:
-            raise ValueError('整脸生成检测目前支持照片；视频请使用换脸/篡改检测。')
+            if face_crop:
+                raise ValueError('--face-crop is only supported for images')
+            from .video_analysis import analyze_video
+            return analyze_video(self, path, progress, generation=True, sampling=video_sampling)
         if progress:
             progress('reading_image', 0, 1)
         with Image.open(path) as source:
@@ -78,33 +81,30 @@ class FaceAnalyzer:
     def predict(self, path, face_crop=False, progress=None, task='auto', video_sampling='adaptive'):
         is_photo = Path(path).suffix.lower() in PHOTO_SUFFIXES
         if task == 'auto':
-            task = 'both' if is_photo else 'manipulation'
+            task = 'both'
         if task == 'both':
-            if not is_photo:
-                raise ValueError('双项检测目前只支持照片；视频使用人脸篡改检测。')
             # Each head keeps its own threshold and score. There is no calibrated combined probability.
             results, errors = {}, {}
             for name in ('generation', 'manipulation'):
                 try:
-                    results[name] = self.predict(path, face_crop, progress, task=name)
+                    results[name] = self.predict(path, face_crop, progress, task=name, video_sampling=video_sampling)
                 except (OSError, ValueError, RuntimeError) as exc:
                     errors[name] = str(exc)
             if not results:
                 raise ValueError('两项检测均未完成：' + str(errors))
             reference = next(iter(results.values()))
-            return dict(path=str(Path(path).resolve()), media_type='image', task='photo_dual', score=None,
+            return dict(path=str(Path(path).resolve()), media_type='image' if is_photo else 'video', task='photo_dual' if is_photo else 'video_dual', score=None,
                         decision='partial_results' if errors else ('no_face' if all(r['decision'] == 'no_face' for r in results.values()) else 'separate_results'),
-                        faces=reference['faces'], sampled_frames=1, no_face_frames=reference['no_face_frames'],
+                        faces=reference['faces'], sampled_frames=1 if is_photo else reference['sampled_frames'], no_face_frames=reference['no_face_frames'],
                         detected_faces=reference.get('detected_faces', reference['faces']),
                         unanalysed_faces=reference.get('unanalysed_faces', 0),
                         results=results, errors=errors,
                         scope='Two experimental tasks; inspect each face and task separately. No joint false-positive calibration.')
         if task == 'generation':
-            if not is_photo:
-                raise ValueError('此项目用于照片。请将上方「检测项目」切换为「自动」或「换脸 / 篡改」。')
             if self.generation is None:
                 self.generation = GenerationPredictor(checkpoint=self.generation_checkpoint,device=self.device)
-            return self.generation.predict(path, face_crop=face_crop, progress=progress)
+            return self.generation.predict(path, face_crop=face_crop, progress=progress,
+                                           **({'video_sampling': video_sampling} if not is_photo else {}))
         if task != 'manipulation':
             raise ValueError('Unknown detection task')
         if is_photo and self.photo_checkpoint:

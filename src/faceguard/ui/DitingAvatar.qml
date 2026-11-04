@@ -12,8 +12,8 @@ Item {
     readonly property string representation: "23-joint skinned 3D character with continuous skeletal performance"
     readonly property real footLine: height * 0.885
     readonly property alias performance: actor
-    Behavior on listening { NumberAnimation { duration: avatar.reducedMotion ? 0 : 650; easing.type: Easing.InOutSine } }
-    Behavior on gaze { NumberAnimation { duration: avatar.reducedMotion ? 0 : 400; easing.type: Easing.InOutSine } }
+    Behavior on listening { enabled: !avatar.reducedMotion; NumberAnimation { duration: 650; easing.type: Easing.InOutSine } }
+    Behavior on gaze { enabled: !avatar.reducedMotion; NumberAnimation { duration: 400; easing.type: Easing.InOutSine } }
     function respond() { actor.respond() }
     // Reuse the actual rendered pose so the reflection has no separate clock.
     ShaderEffectSource {

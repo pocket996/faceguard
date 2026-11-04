@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import shutil
 
 
 def main():
@@ -17,6 +18,7 @@ def main():
     p.add_argument('--asset',type=Path,required=True)
     p.add_argument('--balsam',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
+    p.add_argument('--cornea-shader',type=Path,help='Optional view-dependent reflection shader for geometric corneas')
     args=p.parse_args()
     out=args.output.resolve();out.mkdir(parents=True,exist_ok=True)
     result=subprocess.run([str(args.balsam.resolve()),str(args.asset.resolve()),'-o',str(out),'--useBinaryKeyframes'],
@@ -96,6 +98,18 @@ def main():
             skin.joints[i].scale = Qt.vector3d(rest.x*(1+.009*wave), rest.y*(1+.006*wave), rest.z*(1+.012*wave))
         }
     }
+    function flutterEars(phase) {
+        // A small local pinna adjustment over the freshly sampled clip pose.
+        // Both additive curves begin/end at zero and differ in timing.
+        for (var i = 0; i < skin.joints.length; ++i) {
+            var joint = skin.joints[i], angle = 0
+            if (joint.objectName === "EarUpright") angle = 4*(Math.sin(2*phase)+.30*Math.sin(5*phase))
+            else if (joint.objectName === "EarFolded") angle = 3*(Math.sin(2*phase-.7)+Math.sin(.7)*Math.cos(phase))
+            else continue
+            var half = angle*Math.PI/360, c = Math.cos(half), s = Math.sin(half), q = joint.rotation
+            joint.rotation = Qt.quaternion(q.scalar*c-q.z*s,q.x*c+q.y*s,q.y*c-q.x*s,q.z*c+q.scalar*s)
+        }
+    }
     Component.onCompleted: {
         for (var i = 0; i < skin.joints.length; ++i) {
             var joint = skin.joints[i]
@@ -105,6 +119,24 @@ def main():
     }
 '''%(durations['Respond'],durations['Listen'],durations['Idle'])
     source=source.replace('    id: node\n','    id: node\n'+interface,1)
+    if args.cornea_shader:
+        # Keep shader source with the mesh resources so normal runtime and a
+        # clean checkout do not depend on authoring outputs or absolute paths.
+        shutil.copyfile(args.cornea_shader, out/'cornea.frag')
+        source,count=re.subn(r'PrincipledMaterial \{\s+id: (transparent_convex_cornea_\w+_material)\s+objectName: "(Transparent convex cornea (?:Near|Far))"[\s\S]*?\n    \}',
+            lambda m: '''CustomMaterial {
+        id: %s
+        objectName: "%s"
+        property real highlightStrength: 1.0
+        shadingMode: CustomMaterial.Shaded
+        cullMode: Material.BackFaceCulling
+        sourceBlend: CustomMaterial.SrcAlpha
+        destinationBlend: CustomMaterial.OneMinusSrcAlpha
+        sourceAlphaBlend: CustomMaterial.One
+        destinationAlphaBlend: CustomMaterial.OneMinusSrcAlpha
+        fragmentShader: "cornea.frag"
+    }'''%(m.group(1),m.group(2)),source)
+        assert count==2, 'Expected two geometric corneas'
     for name in durations:
         pattern=r'(id: '+name.lower()+r'_timeline\s+objectName: "'+name+r'"[\s\S]*?endFrame: \d+)\s+currentFrame: 0\s+enabled: true\s+animations: TimelineAnimation \{[\s\S]*?\n        \}'
         source,count=re.subn(pattern,lambda m:m.group(1)+'\n        currentFrame: node.clipTime\n        enabled: node.clipName === "'+name+'"',source,count=1)

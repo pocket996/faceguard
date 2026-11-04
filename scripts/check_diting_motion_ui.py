@@ -11,8 +11,8 @@ import time
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'src'))
-from PySide6.QtCore import QObject,QMetaObject,QSettings,QUrl,Q_ARG,qInstallMessageHandler
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QObject,QMetaObject,QSettings,QUrl,Q_ARG,QPointF,qInstallMessageHandler
+from PySide6.QtGui import QFont, QVector3D, QImage
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtTest import QTest
@@ -23,7 +23,7 @@ from faceguard.app import AppController,UI_DIRECTORY
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--record',action='store_true')
     args=p.parse_args()
-    out=ROOT/'outputs/diting-3d/animation-v6/ui-check';out.mkdir(parents=True,exist_ok=True)
+    out=ROOT/'outputs/diting-3d/eyes-v7/ui-check';out.mkdir(parents=True,exist_ok=True)
     messages=[]
     def log(kind,context,message):
         messages.append(message);print(message.encode('ascii',errors='backslashreplace').decode(),flush=True)
@@ -76,6 +76,41 @@ def main():
         assert abs(rotation.x())+abs(rotation.y())+abs(rotation.z())>.01
         pose('Listen',1600);capture('listen-peak')
         assert vector(root,'position')==root_position
+        for layer in ('EyeScleraNear','EyeIrisNear','EyePupilNear','EyeCorneaNear'):
+            assert volume.findChild(QObject,layer), layer
+        camera=volume.findChild(QObject,'ditingPreviewCamera')
+        aim=volume.findChild(QObject,'ditingPreviewAim')
+        old_camera=camera.property('position');old_aim=aim.property('position')
+        magnification=camera.property('horizontalMagnification')
+        camera.setProperty('position',QVector3D(-3.6,3.6,7.5))
+        aim.setProperty('position',QVector3D(.4,3.02,.95))
+        camera.setProperty('horizontalMagnification',magnification*3.1)
+        camera.setProperty('verticalMagnification',magnification*3.1)
+        pose('Idle',0);capture('eye-open-closeup')
+        cornea=volume.findChild(QObject,'Transparent convex cornea Near')
+        assert cornea
+        before_image=window.grabWindow()
+        cornea.setProperty('highlightStrength',0)
+        QTest.qWait(150)
+        capture('eye-without-reflection')
+        from PIL import Image, ImageChops
+        # Record the reflection strength in the viewport, excluding the moving
+        # workspace visible behind the modal dialog.
+        corner=volume.mapToScene(QPointF(0,0))
+        def pil_view(frame):
+            scale=frame.width()/window.width()
+            frame=frame.copy(round(corner.x()*scale),round(corner.y()*scale),round(volume.width()*scale),round(volume.height()*scale)).convertToFormat(QImage.Format.Format_RGBA8888)
+            return Image.frombytes('RGBA',(frame.width(),frame.height()),bytes(frame.constBits()))
+        difference=ImageChops.difference(pil_view(before_image),pil_view(window.grabWindow()))
+        reflection_change=difference.convert('RGB').getextrema()
+        print('cornea_pixel_change:',reflection_change,flush=True)
+        assert max(pair[1] for pair in reflection_change)>=40,'The wet cornea highlight must be visible, not just numerically different'
+        cornea.setProperty('highlightStrength',1)
+        QTest.qWait(180);capture('eye-open-closeup')
+        pose('Idle',1135);capture('eye-closed-closeup')
+        camera.setProperty('position',old_camera);aim.setProperty('position',old_aim)
+        camera.setProperty('horizontalMagnification',magnification)
+        camera.setProperty('verticalMagnification',magnification)
         call('playMotion','Respond')
         deadline=time.monotonic()+5
         while (volume.property('motionName')!='Idle' or volume.property('transitioning')) and time.monotonic()<deadline:QTest.qWait(50)
@@ -102,7 +137,7 @@ def main():
         static_frame=digest();QTest.qWait(220);assert digest()==static_frame
         controller.toggleReducedMotion();QTest.qWait(200)
         assert volume.property('playing') and volume.property('motionName')=='Idle'
-        checks=['real 23-joint skin rendered','idle changes chest scale and rendered pixels without rotating root',
+        checks=['real 23-joint skin rendered','separate sclera/iris/recessed pupil/convex cornea','view-dependent cornea highlight verified in actual viewport pixels','idle changes chest scale and rendered pixels without rotating root',
                 'eyelid joint closes during blink','large respond and listen poses render','one-shot returns to idle','interruption blends toward rest before starting next clip',
                 'pause/resume retains timeline position','reduced motion stops deformation and resumes idle']
         if args.record and shutil.which('ffmpeg'):
@@ -124,7 +159,7 @@ def main():
         loader=window.findChild(QObject,'volumePreviewLoader')
         assert loader.property('item') is None
         checks.append('animated scene released on close')
-        forbidden=[m for m in messages if any(t in m for t in ['ReferenceError','TypeError','Cannot assign','Unable to assign','is not a type','Failed to load','Binding loop','Failed to create','setPaused() cannot'])]
+        forbidden=[m for m in messages if any(t in m for t in ['ReferenceError','TypeError','Cannot assign','Unable to assign','is not a type','Failed to load','Binding loop','Failed to create','setPaused() cannot','Failed to compile','Failed to parse shader'])]
         assert not forbidden,forbidden
         (out/'report.json').write_text(json.dumps({'passed':True,'checks':checks,'messages':messages},indent=2),encoding='utf-8')
         print(json.dumps({'passed':True,'checks':checks},indent=2),flush=True)

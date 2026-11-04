@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick3D
-import "assets/diting-motion-v6" as Character
+import "assets/diting-motion-v7" as Character
 
 Node {
     id: actor
@@ -49,12 +49,14 @@ Node {
         character.clipTime = Math.max(0, Math.min(character.clipDuration, milliseconds))
     }
     onDetectingChanged: select(detecting ? "Listen" : "Idle")
-    onReducedMotionChanged: select(detecting ? "Listen" : "Idle")
+    // Let preference bindings settle before changing all skeletal timelines.
+    onReducedMotionChanged: Qt.callLater(function() { actor.select(actor.detecting ? "Listen" : "Idle") })
     onActiveChanged: syncPause()
     onBlendProgressChanged: if (ready) character.blendToBind(blendProgress)
     onListenPhaseChanged: if (hold.running) {
         character.clipTime = 1650 + 270 * Math.sin(listenPhase)
         character.breathe(listenPhase)
+        character.flutterEars(listenPhase)
     }
     Component.onCompleted: if (ready) select(detecting ? "Listen" : "Idle")
     NumberAnimation {
@@ -79,5 +81,5 @@ Node {
         target: actor; property: "listenPhase"; from: 0; to: Math.PI * 2
         duration: 5200; loops: Animation.Infinite
     }
-    Character.DitingActingV6 { id: character; objectName: "ditingWorkspaceSkin" }
+    Character.DitingEyesV7 { id: character; objectName: "ditingWorkspaceSkin" }
 }

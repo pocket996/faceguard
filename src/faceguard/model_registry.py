@@ -3,8 +3,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from .paths import application_directory
 
-MODEL_DIRECTORY = Path(os.environ.get('FACEGUARD_MODEL_DIR', Path(__file__).resolve().parents[2] / 'weights/runtime'))
+MODEL_DIRECTORY = Path(os.environ.get('FACEGUARD_MODEL_DIR', application_directory() / 'weights/runtime'))
 
 
 def generation_profiles():

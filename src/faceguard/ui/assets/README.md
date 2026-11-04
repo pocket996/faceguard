@@ -1,6 +1,45 @@
 # 谛听角色展示资产
 
-## 当前版本：全屏湖面与 23 骨骼角色（2026-11-01）
+## 软件图标（2026-11-02）
+
+正式软件图标使用用户提供的青玉底、米白谛听侧首图样。`../brand.png` 为 1024 × 1024 无损 PNG，与原 JPEG 解码后的 RGB 像素逐项一致；仅去除无关文件元数据，保留原图颜色、轮廓、白色角部与纹理。`../brand.ico` 包含 16 / 20 / 24 / 32 / 40 / 48 / 64 / 128 / 256 像素九个 Windows 尺寸。工作台和共用弹窗读取 PNG，QApplication、窗口与托盘使用同一 ICO；旧 `brand.svg` 仅保留历史溯源，不再被正式 UI 调用。
+
+原图已作为 PNG 随源码保存，复现可在根目录运行 `.venv/Scripts/python.exe scripts/build_brand_icon.py`，不依赖用户原始图片路径、图像生成服务或本机 outputs。完整界面检查同时验证 PNG 加载、ICO 九尺寸读取与实际窗口图标；详细记录位于 `outputs/brand-icon-20261102/`。当前源码尚未制作新的免安装 EXE，历史 Release 附件不由本轮改动重写。
+
+## 当前版本：远景淡莲、分层眼睛与双耳动作（2026-11-02）
+
+正式背景改用 `ink-lake-lotus-v3.png`（1672 × 941，2,327,208 字节，SHA-256 `51e3d54e4f675fb46c71f1a1cd9ced79fcfc14d60193f1f41d04ab78911d4c14`），使用内置 **imagegen** 在既有湖面上编辑，仅在远处水岸附近加入三朵淡粉莲花及少量小叶、倒影。保留中央开阔水面与角色主次，随窗口裁切和角色遮挡不一定同时看见三朵。旧背景保留溯源，正式副本已复制到本目录，运行无需生成缓存或外部服务。
+
+本轮最终提示词：
+
+```text
+Use case: precise-object-edit. Input image is the edit target, the existing finished ink-wash lake background for the FaceGuard desktop application.
+Preserve the entire existing composition, mountains, pavilion, moon gate, shoreline at the halfway point, warm ivory and celadon palette, all lighting, water reflections and fine ink-wash textures. Make ONLY this very small addition: THREE tiny understated lotus blossoms in the distant lake, just below the far shoreline. Two tiny pale dusty-pink blossoms near x=33 percent / y=53 percent and one near x=71 percent / y=54 percent. Place them on the water with only a few small muted celadon lotus leaves and faint reflections, natural perspective, visually small because they are far away. Each flower head is at most 1.0 percent of the image width, softly painted, low contrast, desaturated, refined and atmospheric. They are quiet details discovered on inspection, never a focal point. Keep all central foreground water completely open for a separately rendered character. Do not add a lotus field, extra flowers, large leaves, ornamental foreground flowers, any animal or character, text, logo, border, UI or watermark. Do not move or redesign the scene.
+```
+
+眼部制作入口为 `scripts/refine_diting_eyes.py`，在 v6 原坐姿、23 骨骼及三组动作上重做双眼：每眼独立眼白曲面、带径向浅浮雕的碗状虹膜、凹入瞳孔杯与透明凸角膜，保留原眼睑绑定，柔化内缘着色；未用另一张眼睛图片覆盖旧眼球。身体、UV 和原角色身份保持原版。运行资源为 `diting-motion-v7/`，工作台、桌宠、立体预览都已接入。
+
+Qt 运行时通过 `../shaders/cornea.frag` 在真实蒙皮角膜上计算随曲面法线 / 观察方向变化的双光源反光，再以透明材质叠加；这是解析高光近似，不是完整眼内光线追踪或真实折射，也不是把固定白点画进虹膜。导入脚本的 `--cornea-shader` 将原生材质源代码随运行资源复制，普通运行不依赖 Blender、作者目录或网络。材质实现采用 [Qt 6.8 自定义着色材质](https://doc.qt.io/qt-6.8/qml-qtquick3d-custommaterial.html)；编译错误和实际视口像素变化都纳入检查，视口按截图比例处理高 DPI。
+
+倾听片段增加两次错开的竖耳 / 垂耳轻抖与回弹，最大附加角分别约 8° / 7°；持续检测阶段再叠加不同相位的小幅耳动，保持呼吸与倾听。原脚掌固定，结束 / 取消时从当前姿态平滑回待机。减少动态效果时全部静止；主窗口在偏好通知结束后同步本地 QML 状态，避免通知重入骨骼与渲染资源更新造成绑定警告。
+
+编辑场景 `diting-eyes-v7.blend`、`DitingEyesV7.glb`、源码副本和 `eye-report.json` 保存于 `outputs/diting-3d/eyes-v7/`。GLB 为 25,144,140 字节，SHA-256 `5fa570e419af73245a8f37c885b7fb85eb7e4f7a676bda7c6a26a153e1e81ae5`。375 帧身体形变检查的脚掌位移 / 起止差均为 0，局部边长比第 99 百分位最大约 1.214；三个闭眼峰值双眼全部瞳孔顶点被眼睑 / 眼缘 / 眼眶遮挡。此检查针对主视角和固定坐姿，不能覆盖所有转角与自交。
+
+本机 75 项现有测试、完整界面（含照片 / 视频预览和实际鼠标切换偏好）、骨骼预览与湖面专项检查通过。眼部近景 / 高光开关像素对照位于 `outputs/diting-3d/eyes-v7/ui-check/`；工作台、持续检测双耳取样、桌宠、1080 × 720 与真实时间录制的 GIF 位于 `outputs/lotus-eyes-20261102/`。完整界面退出后仍有既有 Qt 渲染资源清理提示，未作为外观或跨机器验收完成的证明。原重建的眼角、口鼻、材质接缝仍需精修；未新增张嘴 / 四足行走绑定，未改检测模型或上传远端。
+
+复现（仓库根目录）：
+
+```powershell
+& 'D:/tools/blender/blender-4.5.15-windows-x64/blender.exe' -b --python-exit-code 1 --python scripts/refine_diting_eyes.py -- --scene outputs/diting-3d/animation-v6/diting-acting-v6.blend --face-report outputs/diting-3d/animation-v5/face-accepted/face-report.json --output outputs/diting-3d/eyes-v7
+.venv/Scripts/python.exe scripts/import_diting_animation.py --asset outputs/diting-3d/eyes-v7/DitingEyesV7.glb --balsam .venv/Lib/site-packages/PySide6/balsam.exe --output src/faceguard/ui/assets/diting-motion-v7 --cornea-shader src/faceguard/ui/shaders/cornea.frag
+.venv/Scripts/python.exe scripts/check_diting_motion_ui.py
+.venv/Scripts/python.exe scripts/check_courtyard_ui.py --record
+```
+
+以下各节保留对应版本的历史制作事实，当前运行状态以本节为准。
+
+
+## 历史：全屏湖面与 23 骨骼角色（2026-11-01，眼部与背景已更新）
 
 工作台背景已从中央画框扩展为全窗口水墨湖面，延伸到左右面板后方。用户确认保留谛听端坐造型；移除石台，以脚掌接触暗部、脚边涟漪和实时淡倒影衔接水面。背景绘画不包含角色，水岸抬高到画面上半部，保证角色脚下为连续水面。导航与操作区使用浅色遮罩保持文字可读；桌宠使用同一骨骼角色，隐藏水面效果。
 

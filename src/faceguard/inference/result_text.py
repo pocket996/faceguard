@@ -4,6 +4,34 @@ NAMES = {'generation': 'AI整脸生成', 'manipulation': '人脸篡改'}
 
 def result_lines(result):
     lines = []
+    if result.get('media_type') == 'video' and 'results' in result:
+        for task, item in result['results'].items():
+            lines.append(NAMES.get(task, task))
+            lines.extend('  ' + line for line in result_lines(item))
+        for task, error in result.get('errors', {}).items():
+            lines.append(f"{NAMES.get(task, task)}：未完成，{error}")
+        return lines
+    if result.get('sampling') == 'generation_frame_review':
+        if result.get('model_label'):
+            lines.append('生成模型：' + result['model_label'])
+        lines.append('视频生成线索：逐帧人脸复核')
+        lines.append('照片模型及照片阈值用于采样人脸；未标定整段视频结论或误报率。')
+        lines.append(f"采样 {result['sampled_frames']} 帧，其中 {result['no_face_frames']} 帧未找到人脸。")
+        if result['decision'] == 'no_face':
+            lines.append('未找到人脸，无法判断。')
+        else:
+            flagged = sum(face['decision'] == 'suspected_generation' for row in result['observations'] for face in row['faces'])
+            lines.append(f'疑似生成的人脸观测：{flagged} / {result["faces"]}（同一人可能重复出现）。')
+        for row in result['observations']:
+            for face in row['faces']:
+                if face['decision'] != 'suspected_generation':
+                    continue
+                position = f"{row['seconds']:.2f} 秒" if row['seconds'] is not None else f"帧 {row['frame_index']}"
+                lines.append(f"  {position} · 人脸 #{face['face_id']}：疑似生成 · 分 {face['score']:.4f} · 阈值 {face['threshold']:.4f}")
+        if result.get('unanalysed_faces'):
+            lines.append(f"另有 {result['unanalysed_faces']} 张人脸观测未分析。")
+        lines.append('仅检查整脸生成视觉线索，不分析音频或整幅场景；采样间隙、陌生生成工具仍可能漏检。')
+        return lines
     if result.get('sampling') == 'adaptive_review':
         baseline = result['legacy_baseline']
         verdict='疑似篡改' if baseline['decision']=='suspected_manipulation' else ('无法分析' if baseline['decision']=='no_face' else '未检出明显篡改')

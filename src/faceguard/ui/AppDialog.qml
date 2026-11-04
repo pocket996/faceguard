@@ -29,7 +29,7 @@ Dialog {
             anchors.top: parent.top; anchors.margins: 24; spacing: 14
             Rectangle {
                 width: 48; height: 48; radius: 15; color: "#e8ede4"
-                Image { anchors.centerIn: parent; width: 38; height: 38; source: "brand.svg" }
+                Image { objectName: "dialogBrandMark"; readonly property bool assetReady: status === Image.Ready; anchors.centerIn: parent; width: 38; height: 38; source: "brand.png"; sourceSize: Qt.size(76, 76); mipmap: true }
             }
             ColumnLayout {
                 Layout.fillWidth: true; spacing: 5

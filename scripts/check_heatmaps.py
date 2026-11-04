@@ -1,5 +1,6 @@
 """Real local photo/candidate explanations; artifacts are never training data."""
 import copy
+import argparse
 import json
 from pathlib import Path
 import sys
@@ -22,8 +23,12 @@ def main():
 
     torch.set_num_threads(2)
     cv2.setNumThreads(1)
-    output = ROOT / 'outputs/heatmaps-check-20261101/numeric'
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', type=Path, default=ROOT / 'outputs/heatmaps-improved-20261102/numeric')
+    output = parser.parse_args().output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    if (output / 'report.json').exists():
+        raise FileExistsError('Use a fresh output directory to preserve verification evidence.')
     photo = next(data_location('lfw').rglob('*.jpg'))
     generated = data_location('examples') / 'joint/generation_0.jpg'
     with Image.open(photo) as source:
@@ -60,6 +65,14 @@ def main():
                                   difference=abs(record['score'] - payload['score']), seconds=duration,
                                   grid_shape=np.asarray(payload['grid']).shape,
                                   alpha_bbox=overlay.getchannel('A').getbbox()))
+                if name == 'real' and index == 0:
+                    for target in ('positive_logit', 'negative_logit'):
+                        occlusion_record = dict(record, kind='occlusion', target=target)
+                        occlusion = explain_face(original, occlusion_record)
+                        assert valid_cached_map(occlusion, occlusion_record)
+                        cases.append(dict(device=device, case='occlusion-real', task=record['task'], target=target,
+                                          score=record['score'], recomputed_score=occlusion['score'],
+                                          difference=abs(record['score'] - occlusion['score'])))
             assert result == before
         # Every installed candidate must use its own preprocessing and model hash.
         for profile in generation_profiles()[1:]:

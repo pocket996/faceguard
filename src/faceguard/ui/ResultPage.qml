@@ -30,6 +30,7 @@ Item {
                 Text { text: controller.fileName || "先导入媒体，再查看分析结果"; color: "#7c8778"; font.pixelSize: 12 }
             }
             Item { Layout.fillWidth: true }
+            AppButton { objectName: "saveHeatmapDiagram"; text: "导出当前图示"; enabled: page.heatmapReady && !controller.detailBusy; onClicked: controller.saveHeatmap(page.overlayOpacity) }
             AppButton { objectName: "saveReport"; text: "保存检测报告"; enabled: controller.hasResult && !controller.busy; onClicked: controller.saveReport() }
             AppButton { text: "返回工作台 ↗"; primary: true; onClicked: page.backRequested() }
         }
@@ -40,6 +41,17 @@ Item {
                 radius: 18; color: "#fcfbf7"; border.color: "#e1dfd3"
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 18; spacing: 14
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: "解释方向"; color: "#7c8778"; font.pixelSize: 11 }
+                        AppComboBox { objectName: "heatmapTargetSelector"; Layout.preferredWidth: page.compact ? 150 : 170; textRole: "label"; model: [{label: "生成 / 篡改线索"}, {label: "未检出方向"}]; currentIndex: controller.heatmapTargetIndex; onActivated: controller.setHeatmapTarget(currentIndex); Component.onCompleted: popup.objectName = "heatmapDirectionPopup" }
+                        Text { text: "方式"; color: "#7c8778"; font.pixelSize: 11 }
+                        AppComboBox { objectName: "heatmapMethodSelector"; Layout.preferredWidth: 120; textRole: "label"; model: [{label: "梯度关注"}, {label: "遮挡对照"}]; currentIndex: controller.heatmapMethodIndex; onActivated: controller.setHeatmapMethod(currentIndex); Component.onCompleted: popup.objectName = "heatmapMethodPopup" }
+                        Item { Layout.fillWidth: true }
+                        Text { text: "低"; color: "#7c8778"; font.pixelSize: 11 }
+                        Rectangle { Layout.preferredWidth: page.compact ? 55 : 90; height: 8; radius: 4; gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: "#3756a8" } GradientStop { position: .5; color: "#e3be57" } GradientStop { position: 1; color: "#bd3c36" } } }
+                        Text { text: "高"; color: "#7c8778"; font.pixelSize: 11 }
+                    }
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7
                         Repeater { model: ["原图", "热力图叠加", "并排对比"]
@@ -120,7 +132,7 @@ Item {
                         AppButton { text: "取消热力图"; visible: controller.detailBusy; implicitWidth: 100; onClicked: controller.cancelDetail() }
                     }
                     Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: controller.heatmapStatus; color: "#55705f"; font.pixelSize: 12 }
-                    Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: "热力图用于解释模型关注区域，不代表已经验证的精确篡改边界。"; color: "#7c8778"; font.pixelSize: 10 }
+                    Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: "粗粒度模型关注图，放大不增加定位信息。每张图独立归一化，不代表真假概率或精确篡改边界。"; color: "#7c8778"; font.pixelSize: 10 }
                 }
             }
             Rectangle {
